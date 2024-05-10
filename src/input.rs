@@ -8,25 +8,26 @@ const MAX_DIM: usize = 8;
 
 #[cxx::bridge]
 mod ffi {
-    /// Struct for storing information of a tensor. This is passed between functions
-    /// during graph creation.
-    #[derive(Copy, Clone, Default)]
-    pub struct TensorInfo {
-        /// Id into the RecExpr constructed
-        pub id: Id,
-        /// Shape of the tensor. We deal with tensor up to MAX_DIM dimensions
-        pub shape: [i32; 8],
-        /// Number of dimensions of this tensor
-        pub n_dim: usize,
-    }
-
     extern "Rust" {
         type CppGraphConverter;
+        type TensorInfo;
 
-        fn new_input(graph: &mut CppGraphConverter, dims: &[i32]) -> TensorInfo;
-        fn relu(graph: &mut CppGraphConverter, inpt: TensorInfo) -> TensorInfo;
+        fn new_input(graph: &mut CppGraphConverter, dims: &[i32]) -> &TensorInfo;
+        fn relu(graph: &mut CppGraphConverter, inpt: &TensorInfo) -> &TensorInfo;
         fn debug(graph: &CppGraphConverter);
     }
+}
+
+/// Struct for storing information of a tensor. This is passed between functions
+/// during graph creation.
+#[derive(Copy, Clone, Default)]
+pub struct TensorInfo {
+    /// Id into the RecExpr constructed
+    pub id: Id,
+    /// Shape of the tensor. We deal with tensor up to MAX_DIM dimensions
+    pub shape: [i32; 8],
+    /// Number of dimensions of this tensor
+    pub n_dim: usize,
 }
 
 #[derive(Debug)]
@@ -34,12 +35,12 @@ pub struct CppGraphConverter {
     gc: &mut GraphConverter,
 }
 
-pub fn new_input(graph: &mut CppGraphConverter, dims: &[i32])-> TensorInfo {
-    graph.gc.new_input(dims)
+pub fn new_input(graph: &mut CppGraphConverter, dims: &[i32])-> &TensorInfo {
+    &graph.gc.new_input(dims)
 }
 
-pub fn relu(graph: &mut CppGraphConverter, inpt: TensorInfo) -> TensorInfo {
-    graph.gc.relu(inpt.ti)
+pub fn relu(graph: &mut CppGraphConverter, inpt: &TensorInfo) -> &TensorInfo {
+    &graph.gc.relu(inpt.ti)
 }
 
 pub fn debug(graph: &CppGraphConverter) {
