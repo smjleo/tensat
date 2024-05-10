@@ -2,7 +2,6 @@ use crate::model::*;
 use egg::*;
 use itertools::Itertools;
 use std::collections::HashMap;
-pub use ffi::*;
 
 const MAX_DIM: usize = 8;
 
@@ -18,19 +17,16 @@ pub struct GraphConverter {
     name_gen: NameGen,
 }
 
-#[cxx::bridge]
-mod ffi {
-    /// Struct for storing information of a tensor. This is passed between functions
-    /// during graph creation.
-    #[derive(Copy, Clone, Default)]
-    pub struct TensorInfo {
-        /// Id into the RecExpr constructed
-        pub id: Id,
-        /// Shape of the tensor. We deal with tensor up to MAX_DIM dimensions
-        pub shape: [i32; MAX_DIM],
-        /// Number of dimensions of this tensor
-        pub n_dim: usize,
-    }
+/// Struct for storing information of a tensor. This is passed between functions
+/// during graph creation.
+#[derive(Copy, Clone, Default)]
+pub struct TensorInfo {
+    /// Id into the RecExpr constructed
+    pub id: Id,
+    /// Shape of the tensor. We deal with tensor up to MAX_DIM dimensions
+    pub shape: [i32; MAX_DIM],
+    /// Number of dimensions of this tensor
+    pub n_dim: usize,
 }
 
 /// The APIs of GraphConverter are (intended to) match TASO's so that we can easily

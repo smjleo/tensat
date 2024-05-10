@@ -1,3 +1,3 @@
-struct GraphConverter;
+struct CppGraphConverter;
 struct TensorInfo;
 
