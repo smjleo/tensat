@@ -2,7 +2,6 @@ use crate::model::*;
 use egg::*;
 use itertools::Itertools;
 use std::collections::HashMap;
-use ffi::*;
 
 const MAX_DIM: usize = 8;
 
@@ -12,9 +11,8 @@ mod ffi {
         type CppGraphConverter;
         type TensorInfo;
 
-        fn new_input(graph: &mut CppGraphConverter, dims: &[i32]) -> &TensorInfo;
-        fn relu(graph: &mut CppGraphConverter, inpt: TensorInfo) -> &TensorInfo;
-        fn debug(graph: &CppGraphConverter);
+        fn new_input(self: &mut CppGraphConverter, dims: &[i32]) -> Box<TensorInfo>;
+        fn relu(self: &mut CppGraphConverter, inpt: Box<TensorInfo>) -> Box<TensorInfo>;
     }
 }
 
@@ -30,29 +28,27 @@ pub struct TensorInfo {
     pub n_dim: usize,
 }
 
-#[derive(Debug)]
 pub struct CppGraphConverter {
-    gc: &mut GraphConverter,
+    gc: GraphConverter,
 }
 
-pub fn new_input(graph: &mut CppGraphConverter, dims: &[i32])-> &TensorInfo {
-    &graph.gc.new_input(dims)
+impl CppGraphConverter {
+    pub fn new_input(self: &mut CppGraphConverter, dims: &[i32])-> Box<TensorInfo> {
+        Box::new(self.gc.new_input(dims))
+    }
+
+    pub fn relu(self: &mut CppGraphConverter, inpt: Box<TensorInfo>) -> Box<TensorInfo> {
+        Box::new(self.gc.relu(*inpt))
+    }
 }
 
-pub fn relu(graph: &mut CppGraphConverter, inpt: TensorInfo) -> &TensorInfo {
-    &graph.gc.relu(inpt.ti)
-}
-
-pub fn debug(graph: &CppGraphConverter) {
-    println!("{:?}", graph)
-}
 
 /// Struct for converting a model specified using our Rust interface to RecExpr
 ///
 /// The RecExpr is growed on the fly when member functions are called. Uses a
 /// Hashmap to store the map of scalar nodes to their indices into the RexExpr to
 /// avoid replication.
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct GraphConverter {
     rec_expr: RecExpr<Mdl>,
     scalar_map: HashMap<i32, Id>,
