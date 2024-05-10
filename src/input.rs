@@ -13,7 +13,7 @@ mod ffi {
         type TensorInfo;
 
         fn new_input(graph: &mut CppGraphConverter, dims: &[i32]) -> &TensorInfo;
-        fn relu(graph: &mut CppGraphConverter, inpt: &TensorInfo) -> &TensorInfo;
+        fn relu(graph: &mut CppGraphConverter, inpt: TensorInfo) -> &TensorInfo;
         fn debug(graph: &CppGraphConverter);
     }
 }
@@ -39,7 +39,7 @@ pub fn new_input(graph: &mut CppGraphConverter, dims: &[i32])-> &TensorInfo {
     &graph.gc.new_input(dims)
 }
 
-pub fn relu(graph: &mut CppGraphConverter, inpt: &TensorInfo) -> &TensorInfo {
+pub fn relu(graph: &mut CppGraphConverter, inpt: TensorInfo) -> &TensorInfo {
     &graph.gc.relu(inpt.ti)
 }
 
