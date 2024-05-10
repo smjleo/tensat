@@ -2,6 +2,7 @@ use crate::model::*;
 use egg::*;
 use itertools::Itertools;
 use std::collections::HashMap;
+pub use ffi::*;
 
 const MAX_DIM: usize = 8;
 
@@ -10,23 +11,26 @@ const MAX_DIM: usize = 8;
 /// The RecExpr is growed on the fly when member functions are called. Uses a
 /// Hashmap to store the map of scalar nodes to their indices into the RexExpr to
 /// avoid replication.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct GraphConverter {
     rec_expr: RecExpr<Mdl>,
     scalar_map: HashMap<i32, Id>,
     name_gen: NameGen,
 }
 
-/// Struct for storing information of a tensor. This is passed between functions
-/// during graph creation.
-#[derive(Copy, Clone, Default)]
-pub struct TensorInfo {
-    /// Id into the RecExpr constructed
-    pub id: Id,
-    /// Shape of the tensor. We deal with tensor up to MAX_DIM dimensions
-    pub shape: [i32; MAX_DIM],
-    /// Number of dimensions of this tensor
-    pub n_dim: usize,
+#[cxx::bridge]
+mod ffi {
+    /// Struct for storing information of a tensor. This is passed between functions
+    /// during graph creation.
+    #[derive(Copy, Clone, Default)]
+    pub struct TensorInfo {
+        /// Id into the RecExpr constructed
+        pub id: Id,
+        /// Shape of the tensor. We deal with tensor up to MAX_DIM dimensions
+        pub shape: [i32; MAX_DIM],
+        /// Number of dimensions of this tensor
+        pub n_dim: usize,
+    }
 }
 
 /// The APIs of GraphConverter are (intended to) match TASO's so that we can easily
