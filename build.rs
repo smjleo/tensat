@@ -12,9 +12,11 @@ fn main() {
 
     // C++ graph input bindings
     cxx_build::bridge("src/input.rs")
+        .file("src/graph.cc")
         .compile("tensat-cpp");
 
     println!("cargo:rerun-if-changed=src/input.rs");
+    println!("cargo:rerun-if-changed=src/graph.cc");
     println!("cargo:rerun-if-changed=include/tensat.h");
 
     // Tell cargo to invalidate the built crate whenever the wrapper changes

@@ -11,8 +11,10 @@ mod ffi {
         type CppGraphConverter;
         type TensorInfo;
 
+        fn new_converter() -> Box<CppGraphConverter>;
         fn new_input(self: &mut CppGraphConverter, dims: &[i32]) -> Box<TensorInfo>;
         fn relu(self: &mut CppGraphConverter, inpt: Box<TensorInfo>) -> Box<TensorInfo>;
+        fn print_rec_expr(self: &CppGraphConverter);
     }
 }
 
@@ -28,17 +30,26 @@ pub struct TensorInfo {
     pub n_dim: usize,
 }
 
+#[derive(Default)]
 pub struct CppGraphConverter {
     gc: GraphConverter,
 }
 
+pub fn new_converter() -> Box<CppGraphConverter> {
+    Box::new(CppGraphConverter::default())
+}
+
 impl CppGraphConverter {
-    pub fn new_input(self: &mut CppGraphConverter, dims: &[i32])-> Box<TensorInfo> {
+    pub fn new_input(&mut self, dims: &[i32])-> Box<TensorInfo> {
         Box::new(self.gc.new_input(dims))
     }
 
-    pub fn relu(self: &mut CppGraphConverter, inpt: Box<TensorInfo>) -> Box<TensorInfo> {
+    pub fn relu(&mut self, inpt: Box<TensorInfo>) -> Box<TensorInfo> {
         Box::new(self.gc.relu(*inpt))
+    }
+
+    pub fn print_rec_expr(&self) {
+        println!("{:?}", &self.gc.rec_expr)
     }
 }
 
