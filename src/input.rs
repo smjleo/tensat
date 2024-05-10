@@ -8,8 +8,6 @@ const MAX_DIM: usize = 8;
 
 #[cxx::bridge]
 mod ffi {
-    use super::CppGraphConverter;
-
     /// Struct for storing information of a tensor. This is passed between functions
     /// during graph creation.
     #[derive(Copy, Clone, Default)]
