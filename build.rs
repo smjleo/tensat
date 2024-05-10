@@ -11,10 +11,10 @@ fn main() {
     println!("cargo:rustc-link-lib=taso_runtime");
 
     // C++ graph input bindings
-    cxx_build::bridge("src/cppinput.rs")
+    cxx_build::bridge("src/input.rs")
         .compile("tensat-cpp");
 
-    println!("cargo:rerun-if-changed=src/cppinput.rs");
+    println!("cargo:rerun-if-changed=src/input.rs");
     println!("cargo:rerun-if-changed=include/tensat.h");
 
     // Tell cargo to invalidate the built crate whenever the wrapper changes
