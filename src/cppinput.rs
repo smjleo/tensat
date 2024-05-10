@@ -7,7 +7,8 @@ pub mod ffi {
         type CppGraphConverter;
 
         fn new_converter() -> &CppGraphConverter;
-        fn new_input(graph: &mut CppGraphConverter, dims: &[i32]) -> CppTensorInfo;
+        fn new_input(graph: &mut CppGraphConverter, dims: &[i32]) -> &CppTensorInfo;
+        fn relu(graph: &mut CppGraphConverter, inpt: CppTensorInfo) -> &CppTensorInfo;
         fn debug(graph: &CppGraphConverter);
     }
 }
@@ -26,12 +27,12 @@ pub fn new_converter() -> &CppGraphConverter {
     &CppGraphConverter { gc: &mut GraphConverter::default() }
 }
 
-pub fn new_input(graph: &mut CppGraphConverter, dims: &[i32]) -> CppTensorInfo {
-    CppTensorInfo { ti: graph.gc.new_input(dims) }
+pub fn new_input(graph: &mut CppGraphConverter, dims: &[i32]) -> &CppTensorInfo {
+    &CppTensorInfo { ti: graph.gc.new_input(dims) }
 }
 
-pub fn relu(graph: &mut CppGraphConverter, inpt: CppTensorInfo) -> CppTensorInfo {
-    graph.gc.relu(inpt.ti)
+pub fn relu(graph: &mut CppGraphConverter, inpt: CppTensorInfo) -> &CppTensorInfo {
+    &CppTensorInfo { ti: graph.gc.relu(inpt.ti) }
 }
 
 pub fn debug(graph: &CppGraphConverter) {
