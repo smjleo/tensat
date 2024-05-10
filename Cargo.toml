@@ -19,7 +19,7 @@ serde = { version = "1.0", features = ["derive"] }
 cxx = "1.0"
 
 [dependencies.egg]
-path = "../tensat-egg"
+path = "../egg"
 
 #git = "https://github.com/mwillsey/egg"
 #rev = "986bff5c7d2e050e9aa980671c4c7d971c07da6f"
