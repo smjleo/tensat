@@ -5,15 +5,10 @@ use std::path::PathBuf;
 
 fn main() {
     // Tell cargo to tell rustc to link the libraries.
-    println!("cargo:rustc-link-search=/opt/conda/lib");
-    println!("cargo:rustc-link-lib=protobuf");
     println!("cargo:rustc-link-search=/usr/local/lib");
     println!("cargo:rustc-link-lib=taso_runtime");
-
-    // C++ graph input bindings
-    cxx_build::bridge("src/input.rs")
-        .file("src/graph.cc")
-        .compile("tensat-cpp");
+    println!("cargo:rustc-link-search=/opt/conda/lib");
+    println!("cargo:rustc-link-lib=protobuf");
 
     println!("cargo:rerun-if-changed=src/input.rs");
     println!("cargo:rerun-if-changed=src/graph.cc");
@@ -48,4 +43,8 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
+
+    // C++ graph input bindings
+    cxx_build::bridge("src/input.rs")
+        .compile("tensatcpp");
 }

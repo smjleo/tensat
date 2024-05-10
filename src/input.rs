@@ -49,7 +49,7 @@ impl CppGraphConverter {
     }
 
     pub fn print_rec_expr(&self) {
-        println!("{:?}", &self.gc.rec_expr)
+        println!("{}", &self.gc.rec_expr.pretty(10))
     }
 }
 
