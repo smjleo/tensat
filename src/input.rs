@@ -15,7 +15,7 @@ mod ffi {
         /// Id into the RecExpr constructed
         pub id: Id,
         /// Shape of the tensor. We deal with tensor up to MAX_DIM dimensions
-        pub shape: [i32; MAX_DIM],
+        pub shape: [i32; 8],
         /// Number of dimensions of this tensor
         pub n_dim: usize,
     }
