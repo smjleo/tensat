@@ -1,7 +1,8 @@
 use crate::model::*;
 use egg::*;
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::{borrow::Borrow, collections::HashMap};
+use cxx::{CxxVector};
 
 const MAX_DIM: usize = 8;
 
@@ -13,8 +14,66 @@ mod ffi {
 
         fn new_converter() -> Box<CppGraphConverter>;
         fn new_input(self: &mut CppGraphConverter, dims: &[i32]) -> Box<TensorInfo>;
-        fn relu(self: &mut CppGraphConverter, inpt: Box<TensorInfo>) -> Box<TensorInfo>;
+        fn new_weight(self: &mut CppGraphConverter, dims: &[i32]) -> Box<TensorInfo>;
+        fn conv2d(
+            self: &mut CppGraphConverter,
+            inpt: &TensorInfo,
+            wght: &TensorInfo,
+            stride_h: i32,
+            stride_w: i32,
+            padding: i32,
+            activation: i32,
+        ) -> Box<TensorInfo>;
+        fn dropout(self: &mut CppGraphConverter, inpt: &TensorInfo) -> Box<TensorInfo>;
+        fn relu(self: &mut CppGraphConverter, inpt: &TensorInfo) -> Box<TensorInfo>;
+        fn tanh(self: &mut CppGraphConverter, inpt: &TensorInfo) -> Box<TensorInfo>;
+        fn sigmoid(self: &mut CppGraphConverter, inpt: &TensorInfo) -> Box<TensorInfo>;
+        fn batchnorm(
+            self: &mut CppGraphConverter, 
+            inpt: &TensorInfo, 
+            scale: &TensorInfo, 
+            bias: &TensorInfo, 
+            mean: &TensorInfo, 
+            var: &TensorInfo, 
+        ) -> Box<TensorInfo>;
+        fn add(self: &mut CppGraphConverter, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo>;
+        fn matmul(self: &mut CppGraphConverter, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo>;
+        fn mul(self: &mut CppGraphConverter, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo>;
+        fn concat(
+            self: &mut CppGraphConverter,
+            axis: i32,
+            ndim: i32,
+            inpt_1: &TensorInfo,
+            inpt_2: &TensorInfo,
+        ) -> Box<TensorInfo>;
+        // TODO
+        // fn concat_multi(self: &mut CppGraphConverter, axis: i32, inputs: &[&TensorInfo]) -> Box<TensorInfo>;
+        fn maxpool2d(
+            self: &mut CppGraphConverter,
+            inpt: &TensorInfo,
+            kernel_h: i32,
+            kernel_w: i32,
+            stride_h: i32,
+            stride_w: i32,
+            padding: i32,
+        ) -> Box<TensorInfo>;
+        fn avgpool2d(
+            self: &mut CppGraphConverter,
+            inpt: &TensorInfo,
+            kernel_h: i32,
+            kernel_w: i32,
+            stride_h: i32,
+            stride_w: i32,
+            padding: i32,
+        ) -> Box<TensorInfo>;
+        fn enlarge(self: &mut CppGraphConverter, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo>;
+        fn split(self: &mut CppGraphConverter, axis: i32, inpt: &TensorInfo) -> Vec<TensorInfo>;
+        fn reshape(self: &mut CppGraphConverter, inpt: &TensorInfo, shape: &[i32]) -> Box<TensorInfo>;
+        fn transpose(self: &mut CppGraphConverter, inpt: &TensorInfo, perm: &[i32], shuffle: bool) -> Box<TensorInfo>;
+        fn noop(self: &mut CppGraphConverter, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo>;
+        
         fn print_rec_expr(self: &CppGraphConverter);
+        fn pretty_print_rec_expr(self: &CppGraphConverter, width: i32);
     }
 }
 
@@ -40,16 +99,131 @@ pub fn new_converter() -> Box<CppGraphConverter> {
 }
 
 impl CppGraphConverter {
-    pub fn new_input(&mut self, dims: &[i32])-> Box<TensorInfo> {
+    pub fn new_input(&mut self, dims: &[i32]) -> Box<TensorInfo> {
         Box::new(self.gc.new_input(dims))
     }
 
-    pub fn relu(&mut self, inpt: Box<TensorInfo>) -> Box<TensorInfo> {
+    pub fn new_weight(&mut self, dims: &[i32]) -> Box<TensorInfo> {
+        Box::new(self.gc.new_weight(dims))
+    }
+
+    pub fn conv2d(
+        &mut self,
+        inpt: &TensorInfo,
+        wght: &TensorInfo,
+        stride_h: i32,
+        stride_w: i32,
+        padding: i32,
+        activation: i32,
+    ) -> Box<TensorInfo> {
+        Box::new(self.gc.conv2d(*inpt, *wght, stride_h, stride_w, padding, activation))
+    }
+
+    pub fn dropout(&mut self, inpt: &TensorInfo) -> Box<TensorInfo> {
+        Box::new(self.gc.dropout(*inpt))
+    }
+
+    pub fn relu(&mut self, inpt: &TensorInfo) -> Box<TensorInfo> {
         Box::new(self.gc.relu(*inpt))
     }
 
+    pub fn tanh(&mut self, inpt: &TensorInfo) -> Box<TensorInfo> {
+        Box::new(self.gc.tanh(*inpt))
+    }
+
+    pub fn sigmoid(&mut self, inpt: &TensorInfo) -> Box<TensorInfo> {
+        Box::new(self.gc.sigmoid(*inpt))
+    }
+
+    pub fn batchnorm(
+        &mut self, 
+        inpt: &TensorInfo, 
+        scale: &TensorInfo, 
+        bias: &TensorInfo, 
+        mean: &TensorInfo, 
+        var: &TensorInfo, 
+    ) -> Box<TensorInfo> {
+        Box::new(self.gc.batchnorm(*inpt, *scale, *bias, *mean, *var))
+    }
+
+    pub fn add(&mut self, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo> {
+        Box::new(self.gc.add(*inpt_1, *inpt_2))
+    }
+
+    pub fn matmul(&mut self, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo> {
+        Box::new(self.gc.matmul(*inpt_1, *inpt_2))
+    }
+
+    pub fn mul(&mut self, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo> {
+        Box::new(self.gc.mul(*inpt_1, *inpt_2))
+    }
+
+    pub fn concat(
+        &mut self,
+        axis: i32,
+        ndim: i32,
+        inpt_1: &TensorInfo,
+        inpt_2: &TensorInfo
+    ) -> Box<TensorInfo> {
+        Box::new(self.gc.concat(axis, ndim, *inpt_1, *inpt_2))
+    }
+
+    pub fn concat_multi(&mut self, axis: i32, inputs: &[&TensorInfo]) -> Box<TensorInfo> {
+        let x = inputs.iter().map(|b| **b).collect_vec();
+        Box::new(self.gc.concat_multi(axis, &x))
+    }
+
+    pub fn maxpool2d(
+        &mut self,
+        inpt: &TensorInfo, 
+        kernel_h: i32,
+        kernel_w: i32,
+        stride_h: i32,
+        stride_w: i32,
+        padding: i32,
+    ) -> Box<TensorInfo> {
+        Box::new(self.gc.maxpool2d(*inpt, kernel_h, kernel_w, stride_h, stride_w, padding))
+    }
+
+    pub fn avgpool2d(
+        &mut self,
+        inpt: &TensorInfo, 
+        kernel_h: i32,
+        kernel_w: i32,
+        stride_h: i32,
+        stride_w: i32,
+        padding: i32,
+    ) -> Box<TensorInfo> {
+        Box::new(self.gc.avgpool2d(*inpt, kernel_h, kernel_w, stride_h, stride_w, padding))
+    }
+
+    pub fn enlarge(&mut self, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo> {
+        Box::new(self.gc.enlarge(*inpt_1, *inpt_2))
+    }
+
+    pub fn split(&mut self, axis: i32, inpt: &TensorInfo) -> Vec<TensorInfo> {
+        let (a, b) = self.gc.split(axis, *inpt);
+        vec![a, b] 
+    }
+
+    pub fn reshape(&mut self, inpt: &TensorInfo, shape: &[i32]) -> Box<TensorInfo> {
+        Box::new(self.gc.reshape(*inpt, shape))
+    }
+
+    pub fn transpose(&mut self, inpt: &TensorInfo, perm: &[i32], shuffle: bool) -> Box<TensorInfo> {
+        Box::new(self.gc.transpose(*inpt, perm, shuffle))
+    }
+
+    pub fn noop(&mut self, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo> {
+        Box::new(self.gc.noop(*inpt_1, *inpt_2))
+    }
+
     pub fn print_rec_expr(&self) {
-        println!("{}", &self.gc.rec_expr.pretty(10))
+        println!("{:?}", &self.gc.rec_expr)
+    }
+
+    pub fn pretty_print_rec_expr(&self, width: i32) {
+        println!("{}", &self.gc.rec_expr.pretty(width as usize))
     }
 }
 

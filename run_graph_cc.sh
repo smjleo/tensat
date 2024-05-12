@@ -1,1 +1,1 @@
-g++ -std=c++11 -o tensatcpp src/graph.cc -I target/cxxbridge -Ltarget/debug -ltensat -ltaso_runtime && ./tensatcpp
+g++ -std=c++20 -o tensatcpp src/bert.cc -I target/cxxbridge -Ltarget/debug -ltensat -ltaso_runtime && ./tensatcpp

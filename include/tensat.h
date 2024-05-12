@@ -1,3 +1,4 @@
-struct CppGraphConverter;
-struct TensorInfo;
-
+namespace tensat {
+  struct CppGraphConverter;
+  struct TensorInfo;
+}
