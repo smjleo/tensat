@@ -6,6 +6,7 @@ use cxx::{CxxVector};
 
 const MAX_DIM: usize = 8;
 
+// let's turn the ffi on later for easier debugging
 #[cxx::bridge]
 mod ffi {
     extern "Rust" {

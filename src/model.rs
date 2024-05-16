@@ -2,11 +2,8 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
-
 //use rand::prelude::*;
 use rand;
-use root::taso::*;
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::time::{Duration, Instant};
@@ -24,6 +21,9 @@ pub const ACTTANH: i32 = 3;
 
 pub const NOSHUFFLE: i32 = 0;
 pub const SHUFFLE: i32 = 1;
+
+// TODO: match stableHLO opset
+// TODO: add cost as parameter for each op
 
 define_language! {
     pub enum Mdl {
@@ -86,22 +86,22 @@ pub struct ValTnsr {
     pub val: i32,
     /// The name string of this eclass if it is a Name type
     pub name: String,
-    /// The pointer to the tensor if it is a Tensor type
-    pub meta: TensorHandle,
-    /// The pointer to the second tensor if it is a TnsrTuple type (for split node)
-    pub meta_2: TensorHandle,
+    /// The cost of this eclass
+    pub cost: f32,
     /// If the tensor results from all weights computations
     pub all_weights: bool,
 }
 
 impl Default for ValTnsr {
-    fn default() -> Self {
-        ValTnsr {
-            meta: std::ptr::null_mut(),
-            meta_2: std::ptr::null_mut(),
-            ..Default::default()
-        }
-    }
+  fn default() -> Self {
+      ValTnsr {
+          dtype: DataKind::Name,
+          val: 0,
+          name: String::new(),
+          cost: 0.0,
+          all_weights: false,
+      }
+  }
 }
 
 /// Struct for metadata analysis
@@ -110,8 +110,6 @@ impl Default for ValTnsr {
 /// to create (or get) new ops/nodes and stores pointers to the output tensors.
 /// TASO will measure and store the runtime cost when creating a new op/node.
 pub struct TensorAnalysis {
-    /// Points to the graph object on the TASO side
-    pub graph: std::cell::RefCell<Box<Graph>>,
     /// Record blacklisted nodes for filtering cycles
     pub blacklist_nodes: HashSet<Mdl>,
     /// Newly added nodes by order
@@ -120,16 +118,9 @@ pub struct TensorAnalysis {
 
 impl Default for TensorAnalysis {
     fn default() -> Self {
-        unsafe {
-            // NOTE Box heap-allocates, otherwise any pointer from
-            // C++ may be dangling
-            let mut graph = Box::new(Graph::new());
-            Graph_Graph(&mut *graph);
-            TensorAnalysis {
-                graph: std::cell::RefCell::new(graph),
-                blacklist_nodes: HashSet::<Mdl>::new(),
-                newly_added: Vec::<Mdl>::new(),
-            }
+        TensorAnalysis {
+            blacklist_nodes: HashSet::<Mdl>::new(),
+            newly_added: Vec::<Mdl>::new(),
         }
     }
 }
@@ -160,678 +151,61 @@ impl Analysis<Mdl> for TensorAnalysis {
             dims
         };
 
-        let mut g = egraph.analysis.graph.borrow_mut();
         match enode {
-            Mdl::Matmul([act, a, b]) => {
-                // Check types
-                assert!(x(act).dtype == DataKind::Scalar);
-                assert!(x(a).dtype == DataKind::Tnsr);
-                assert!(x(b).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_a = x(a).meta;
-                let t_b = x(b).meta;
-                let activation: ActiMode = x(act).val.try_into().unwrap();
-                let all_weights = x(a).all_weights && x(b).all_weights;
-
-                // Create tensorhandle and get metadata
-                let res = unsafe { g.matmul(t_a, t_b, activation) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::BatchNorm([input, scale, bias, mean, var]) => {
-                // Check types
-                assert!(x(input).dtype == DataKind::Tnsr);
-                assert!(x(scale).dtype == DataKind::Tnsr);
-                assert!(x(bias).dtype == DataKind::Tnsr);
-                assert!(x(mean).dtype == DataKind::Tnsr);
-                assert!(x(var).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_inpt = x(input).meta;
-                let t_scale = x(scale).meta;
-                let t_bias = x(bias).meta;
-                let t_mean = x(mean).meta;
-                let t_var = x(var).meta;
-                let all_weights = x(input).all_weights && x(scale).all_weights && x(bias).all_weights && x(mean).all_weights && x(var).all_weights;
-
-                // Create tensorhandle and get metadata
-                let res =
-                    unsafe { g.batchnorm(t_inpt, t_scale, t_bias, t_mean, t_var) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            },
-            Mdl::Conv2d([stride_h, stride_w, pad, act, inpt, wght]) => {
-                // Check types
-                assert!(x(stride_h).dtype == DataKind::Scalar);
-                assert!(x(stride_w).dtype == DataKind::Scalar);
-                assert!(x(pad).dtype == DataKind::Scalar);
-                assert!(x(act).dtype == DataKind::Scalar);
-                assert!(x(inpt).dtype == DataKind::Tnsr);
-                assert!(x(wght).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_inpt = x(inpt).meta;
-                let t_wght = x(wght).meta;
-                let strideH = x(stride_h).val;
-                let strideW = x(stride_w).val;
-                let padding: PaddingMode = x(pad).val.try_into().unwrap();
-                let activation: ActiMode = x(act).val.try_into().unwrap();
-                let all_weights = x(inpt).all_weights && x(wght).all_weights;
-
-                // Create tensorhandle and get metadata
-                let res =
-                    unsafe { g.conv2d1(t_inpt, t_wght, strideH, strideW, padding, activation) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Ewadd([a, b]) => {
-                // Check types
-                assert!(x(a).dtype == DataKind::Tnsr);
-                assert!(x(b).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_a = x(a).meta;
-                let t_b = x(b).meta;
-                let all_weights = x(a).all_weights && x(b).all_weights;
-
-                // Create tensorhandle and get metadata
-                let res = unsafe { g.element(OpType_OP_EW_ADD, t_a, t_b) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Ewmul([a, b]) => {
-                // Check types
-                assert!(x(a).dtype == DataKind::Tnsr);
-                assert!(x(b).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_a = x(a).meta;
-                let t_b = x(b).meta;
-                let all_weights = x(a).all_weights && x(b).all_weights;
-
-                // Create tensorhandle and get metadata
-                let res = unsafe { g.element(OpType_OP_EW_MUL, t_a, t_b) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Dropout(a) => {
-                assert!(x(a).dtype == DataKind::Tnsr);
-                let t_a = x(a).meta;
-                let all_weights = x(a).all_weights;
-
-                let res = unsafe { g.dropout(t_a) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
- 
-            Mdl::Relu(a) => {
-                assert!(x(a).dtype == DataKind::Tnsr);
-                let t_a = x(a).meta;
-                let all_weights = x(a).all_weights;
-
-                let res = unsafe { g.relu(t_a, true) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Tanh(a) => {
-                assert!(x(a).dtype == DataKind::Tnsr);
-                let t_a = x(a).meta;
-                let all_weights = x(a).all_weights;
-
-                let res = unsafe { g.tanh(t_a, true) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Sigmoid(a) => {
-                assert!(x(a).dtype == DataKind::Tnsr);
-                let t_a = x(a).meta;
-                let all_weights = x(a).all_weights;
-
-                let res = unsafe { g.sigmoid(t_a, true) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Input([name]) => {
-                // Check types
-                assert!(x(name).dtype == DataKind::Name);
-
-                // Get arguments
-                let mut dims = dim_from_name(name);
-                let ndim = dims.len();
-                dims.shrink_to_fit();
-                assert!(dims.len() == dims.capacity());
-                let ptr = dims.as_mut_ptr();
-                std::mem::forget(dims);
-
-                // Create tensorhandle and get metadata
-                let res = unsafe { g.new_input(ndim.try_into().unwrap(), ptr) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: false,
-                }
-            }
-
-            Mdl::Weight([name]) => {
-                // Check types
-                assert!(x(name).dtype == DataKind::Name);
-
-                // Get arguments
-                let mut dims = dim_from_name(name);
-                let ndim = dims.len();
-                dims.shrink_to_fit();
-                assert!(dims.len() == dims.capacity());
-
-                let num_entries = dims.iter().product();
-                let mut weight_data: Vec<f32> = (0..num_entries).map(|_| rand::random()).collect();
-                weight_data.shrink_to_fit();
-                assert!(weight_data.len() == weight_data.capacity());
-
-                let ptr = dims.as_mut_ptr();
-                std::mem::forget(dims);
-                let data_ptr = weight_data.as_mut_ptr();
-                std::mem::forget(weight_data);
-
-                // Create tensorhandle and get metadata
-                let res = unsafe { g.new_weight(ndim.try_into().unwrap(), ptr, data_ptr) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: true,
-                }
-            }
-
-            Mdl::Concat([axis, ndim, a, b]) => {
-                // Check types
-                assert!(x(axis).dtype == DataKind::Scalar);
-                assert!(x(ndim).dtype == DataKind::Scalar);
-                assert!(x(a).dtype == DataKind::Tnsr);
-                assert!(x(b).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_a = x(a).meta;
-                let t_b = x(b).meta;
-                let axis_val = x(axis).val;
-                let all_weights = x(a).all_weights && x(b).all_weights;
-
-                // Create tensorhandle and get metadata
-                let t = [t_a, t_b];
-                let res = unsafe { g.concat(axis_val, 2, t.as_ptr()) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Concat3([axis, ndim, input1, input2, input3]) => {
-                // Check types
-                assert!(x(axis).dtype == DataKind::Scalar);
-                assert!(x(ndim).dtype == DataKind::Scalar);
-                assert!(x(input1).dtype == DataKind::Tnsr);
-                assert!(x(input2).dtype == DataKind::Tnsr);
-                assert!(x(input3).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_1 = x(input1).meta;
-                let t_2 = x(input2).meta;
-                let t_3 = x(input3).meta;
-                let axis_val = x(axis).val;
-                let all_weights = x(input1).all_weights
-                    && x(input2).all_weights
-                    && x(input3).all_weights;
-
-                // Create tensorhandle and get metadata
-                let t = [t_1, t_2, t_3];
-                let res = unsafe { g.concat(axis_val, 3, t.as_ptr()) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Concat4([axis, ndim, input1, input2, input3, input4]) => {
-                // Check types
-                assert!(x(axis).dtype == DataKind::Scalar);
-                assert!(x(ndim).dtype == DataKind::Scalar);
-                assert!(x(input1).dtype == DataKind::Tnsr);
-                assert!(x(input2).dtype == DataKind::Tnsr);
-                assert!(x(input3).dtype == DataKind::Tnsr);
-                assert!(x(input4).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_1 = x(input1).meta;
-                let t_2 = x(input2).meta;
-                let t_3 = x(input3).meta;
-                let t_4 = x(input4).meta;
-                let axis_val = x(axis).val;
-                let all_weights = x(input1).all_weights
-                    && x(input2).all_weights
-                    && x(input3).all_weights
-                    && x(input4).all_weights;
-
-                // Create tensorhandle and get metadata
-                let t = [t_1, t_2, t_3, t_4];
-                let res = unsafe { g.concat(axis_val, 4, t.as_ptr()) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Concat5([axis, ndim, input1, input2, input3, input4, input5]) => {
-                // Check types
-                assert!(x(axis).dtype == DataKind::Scalar);
-                assert!(x(ndim).dtype == DataKind::Scalar);
-                assert!(x(input1).dtype == DataKind::Tnsr);
-                assert!(x(input2).dtype == DataKind::Tnsr);
-                assert!(x(input3).dtype == DataKind::Tnsr);
-                assert!(x(input4).dtype == DataKind::Tnsr);
-                assert!(x(input5).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_1 = x(input1).meta;
-                let t_2 = x(input2).meta;
-                let t_3 = x(input3).meta;
-                let t_4 = x(input4).meta;
-                let t_5 = x(input5).meta;
-                let axis_val = x(axis).val;
-                let all_weights = x(input1).all_weights
-                    && x(input2).all_weights
-                    && x(input3).all_weights
-                    && x(input4).all_weights
-                    && x(input5).all_weights;
-
-                // Create tensorhandle and get metadata
-                let t = [t_1, t_2, t_3, t_4, t_5];
-                let res = unsafe { g.concat(axis_val, 5, t.as_ptr()) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Merge([weight, count]) => {
-                // Check types
-                assert!(x(count).dtype == DataKind::Scalar);
-                assert!(x(weight).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_weight = x(weight).meta;
-                let count_val = x(count).val;
-                let all_weights = x(weight).all_weights;
-
-                // Create tensorhandle and get metadata
-                let res = unsafe { g.merge_gconv(t_weight, count_val) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Poolmax([inpt, kernel_h, kernel_w, stride_h, stride_w, pad, act]) => {
-                // Check types
-                assert!(x(kernel_h).dtype == DataKind::Scalar);
-                assert!(x(kernel_w).dtype == DataKind::Scalar);
-                assert!(x(stride_h).dtype == DataKind::Scalar);
-                assert!(x(stride_w).dtype == DataKind::Scalar);
-                assert!(x(pad).dtype == DataKind::Scalar);
-                assert!(x(act).dtype == DataKind::Scalar);
-                assert!(x(inpt).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_inpt = x(inpt).meta;
-                let kernelH = x(kernel_h).val;
-                let kernelW = x(kernel_w).val;
-                let strideH = x(stride_h).val;
-                let strideW = x(stride_w).val;
-                let padding: PaddingMode = x(pad).val.try_into().unwrap();
-                let activation: ActiMode = x(act).val.try_into().unwrap();
-                let all_weights = x(inpt).all_weights;
-
-                // Create tensorhandle and get metadata
-                let res = unsafe {
-                    g.pool2d_max(
-                        t_inpt, kernelH, kernelW, strideH, strideW, padding, activation,
-                    )
-                };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Poolavg([inpt, kernel_h, kernel_w, stride_h, stride_w, pad, act]) => {
-                // Check types
-                assert!(x(kernel_h).dtype == DataKind::Scalar);
-                assert!(x(kernel_w).dtype == DataKind::Scalar);
-                assert!(x(stride_h).dtype == DataKind::Scalar);
-                assert!(x(stride_w).dtype == DataKind::Scalar);
-                assert!(x(pad).dtype == DataKind::Scalar);
-                assert!(x(act).dtype == DataKind::Scalar);
-                assert!(x(inpt).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_inpt = x(inpt).meta;
-                let kernelH = x(kernel_h).val;
-                let kernelW = x(kernel_w).val;
-                let strideH = x(stride_h).val;
-                let strideW = x(stride_w).val;
-                let padding: PaddingMode = x(pad).val.try_into().unwrap();
-                let activation: ActiMode = x(act).val.try_into().unwrap();
-                let all_weights = x(inpt).all_weights;
-
-                // Create tensorhandle and get metadata
-                let res = unsafe {
-                    g.pool2d_avg(
-                        t_inpt, kernelH, kernelW, strideH, strideW, padding, activation,
-                    )
-                };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Split([axis, inpt]) => {
-                // Check types
-                assert!(x(axis).dtype == DataKind::Scalar);
-                assert!(x(inpt).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_inpt = x(inpt).meta;
-                let axis_val = x(axis).val;
-                let all_weights = x(inpt).all_weights;
-
-                // Create tensorhandle and get metadata
-                unsafe {
-                    // Has to do it this way since TASO side does not provide a
-                    // Graph.split() function that infers split position from input
-                    let op = (*g.model).get_or_create_split1(t_inpt, axis_val, 2);
-                    assert!(op != Op_INVALID_OP);
-                    g.add_edge((*t_inpt).op, op, (*t_inpt).idx, 0);
-                    let x1 = Box::new((*op.ptr).outputs[0].clone());
-                    let res_1 = Box::into_raw(x1);
-                    (*res_1).op = op;
-                    let x2 = Box::new((*op.ptr).outputs[1].clone());
-                    let res_2 = Box::into_raw(x2);
-                    (*res_2).op = op;
-                    Self::Data {
-                        dtype: DataKind::TnsrTuple,
-                        val: 0,
-                        name: String::new(),
-                        meta: res_1,
-                        meta_2: res_2,
-                        all_weights: all_weights,
-                    }
-                }
-            }
-
-            Mdl::Split0(inpt) => {
-                // Check types
-                assert!(x(inpt).dtype == DataKind::TnsrTuple);
-                let all_weights = x(inpt).all_weights;
-
-                let res = x(inpt).meta;
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Split1(inpt) => {
-                // Check types
-                assert!(x(inpt).dtype == DataKind::TnsrTuple);
-                let all_weights = x(inpt).all_weights;
-
-                let res = x(inpt).meta_2;
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Enlarge([a, b]) => {
-                // Check types
-                assert!(x(a).dtype == DataKind::Tnsr);
-                assert!(x(b).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let t_a = x(a).meta;
-                let t_b = x(b).meta;
-                let all_weights = x(a).all_weights && x(b).all_weights;
-
-                // Create tensorhandle and get metadata
-                let res = unsafe { g.enlarge(t_a, t_b) };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Reshape([inpt, shape_name]) => {
-                // Check types
-                assert!(x(shape_name).dtype == DataKind::Name);
-                assert!(x(inpt).dtype == DataKind::Tnsr);
-
-                // Get arguments
-                let dims: Vec<i32> = x(shape_name)
-                    .name
-                    .split("_")
-                    .map(|x| x.parse::<i32>().unwrap())
-                    .collect();
-                let t_inpt = x(inpt).meta;
-                let all_weights = x(inpt).all_weights;
-
-                // Create tensorhandle and get metadata
-                let res = unsafe {
-                    let cpp_dims = convert_to_cpp_vec(&dims);
-                    let ptr = cpp_dims.as_ptr() as *const [u64; 3];
-                    g.reshape(t_inpt, ptr)
-                };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Transpose([inpt, perm_name, shuffle]) => {
-                // Check types
-                assert!(x(perm_name).dtype == DataKind::Name);
-                assert!(x(inpt).dtype == DataKind::Tnsr);
-                assert!(x(shuffle).dtype == DataKind::Scalar);
-
-                // Get arguments
-                let perms: Vec<i32> = x(perm_name)
-                    .name
-                    .split("_")
-                    .map(|x| x.parse::<i32>().unwrap())
-                    .collect();
-                let t_inpt = x(inpt).meta;
-                let shuffle_val = x(shuffle).val;
-                let shuffle_bool = (shuffle_val == SHUFFLE);
-                let all_weights = x(inpt).all_weights;
-
-                // Create tensorhandle and get metadata
-                let res = unsafe {
-                    let cpp_perms = convert_to_cpp_vec(&perms);
-                    let ptr = cpp_perms.as_ptr() as *const [u64; 3];
-                    g.transpose(t_inpt, ptr, shuffle_bool)
-                };
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: res,
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Noop([a, b]) => {
-                // Check types
-                assert!(x(a).dtype == DataKind::Tnsr);
-                assert!(x(b).dtype == DataKind::Tnsr);
-                let all_weights = x(a).all_weights && x(b).all_weights;
-
-                Self::Data {
-                    dtype: DataKind::Tnsr,
-                    val: 0,
-                    name: String::new(),
-                    meta: std::ptr::null_mut(),
-                    meta_2: std::ptr::null_mut(),
-                    all_weights: all_weights,
-                }
-            }
-
-            Mdl::Num(_n) => Self::Data {
+            Mdl::Num(n) => Self::Data {
                 dtype: DataKind::Scalar,
-                val: *_n,
+                val: *n,
                 name: String::new(),
-                meta: std::ptr::null_mut(),
-                meta_2: std::ptr::null_mut(),
+                cost: 0.0,
                 all_weights: false,
             },
 
-            Mdl::Var(_s) => Self::Data {
+            Mdl::Var(s) => Self::Data {
                 dtype: DataKind::Name,
                 val: 0,
-                name: _s.as_str().to_string(),
-                meta: std::ptr::null_mut(),
-                meta_2: std::ptr::null_mut(),
+                name: s.as_str().to_string(),
+                cost: 0.0,
                 all_weights: false,
             },
 
-            other => {
-                println!("{:?}", other);
-                todo!()
+            Mdl::Reshape([input, shape_name]) => {
+                let cost = 0.0;
+                Self::Data {
+                    dtype: DataKind::Tnsr,
+                    val: 0,
+                    name: String::new(),
+                    cost,
+                    all_weights: false,
+                }
+            },
+
+            Mdl::Transpose([input, perm_name, shuffle]) => {
+                let cost = 0.0;
+                Self::Data {
+                    dtype: DataKind::Tnsr,
+                    val: 0,
+                    name: String::new(),
+                    cost,
+                    all_weights: false,
+                }
+            },
+
+            Mdl::Tanh(input) => {
+                let cost = 0.0;
+                Self::Data {
+                    dtype: DataKind::Tnsr,
+                    val: 0,
+                    name: String::new(),
+                    cost,
+                    all_weights: false,
+                }
+            },  
+
+            // Handle other cases similarly...
+            _ => unimplemented!(),
             }
-        }
     }
 
     // Not needed to modify anything
     fn modify(egraph: &mut EGraph<Mdl, Self>, id: Id) {}
-}
-
-/// Convert rust vector to C++ vector, for ffi
-///
-/// The returned C++ format for vector is:
-/// [pointer_to_first_element, pointer_to_last_element, pointer_to_the_end_of_vector_capacity]
-unsafe fn convert_to_cpp_vec(v: &Vec<i32>) -> [*const i32; 3] {
-    [
-        v.as_ptr(),
-        v.as_ptr().offset(v.len().try_into().unwrap()),
-        v.as_ptr().offset(v.capacity().try_into().unwrap()),
-    ]
 }

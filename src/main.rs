@@ -13,10 +13,6 @@ use tensat::optimize::*;
 use tensat::resnet50;
 use tensat::resnext50;
 use tensat::rewrites::*;
-use tensat::inceptionv3;
-use tensat::mobilenetv2;
-use tensat::vgg;
-use tensat::squeezenet;
 use tensat::{parse::*, verify::*};
 
 use serde::{Deserialize, Serialize};
@@ -253,10 +249,10 @@ fn optimize(matches: clap::ArgMatches) {
         Some("resnext50") => resnext50::get_resnext50(),
         Some("bert") => bert::get_bert(),
         Some("nasneta") => nasneta::get_nasneta(),
-        Some("inceptionv3") => inceptionv3::get_inceptionv3(),
-        Some("mobilenetv2") => mobilenetv2::get_mobilenetv2(),
-        Some("vgg") => vgg::get_vgg(),
-        Some("squeezenet") => squeezenet::get_squeezenet(),
+        // Some("inceptionv3") => inceptionv3::get_inceptionv3(),
+        // Some("mobilenetv2") => mobilenetv2::get_mobilenetv2(),
+        // Some("vgg") => vgg::get_vgg(),
+        // Some("squeezenet") => squeezenet::get_squeezenet(),
         Some(_) => panic!("The model name is not supported"),
         None => {
             let model_file = matches
@@ -423,19 +419,20 @@ fn optimize(matches: clap::ArgMatches) {
             runner_ext.egraph.dot().to_svg("target/ext.svg").unwrap();
         }
 
-        let time_start = get_full_graph_runtime(&runner_start, false);
-        println!("Start graph runtime: {}", time_start);
+        println!("WATCH OUT: GRAPH RUNNING AND SAvING IS COMMENTED OUT SINCE IT'S TASO SPECIFIC");
+        // let time_start = get_full_graph_runtime(&runner_start, false);
+        // println!("Start graph runtime: {}", time_start);
 
-        let time_ext = get_full_graph_runtime(&runner_ext, true);
-        println!("Extracted graph runtime: {}", time_ext);
+        // let time_ext = get_full_graph_runtime(&runner_ext, true);
+        // println!("Extracted graph runtime: {}", time_ext);
 
-        if let Some(exportf) = matches.value_of("export_model") {
-            save_model(&runner_start, &(exportf.to_owned()+"_start.model"));
-        }
+        // if let Some(exportf) = matches.value_of("export_model") {
+        //     save_model(&runner_start, &(exportf.to_owned()+"_start.model"));
+        // }
 
-        if let Some(exportf) = matches.value_of("export_model") {
-            save_model(&runner_ext, &(exportf.to_owned()+"_optimized.model"));
-        }
+        // if let Some(exportf) = matches.value_of("export_model") {
+        //     save_model(&runner_ext, &(exportf.to_owned()+"_optimized.model"));
+        // }
 
         if let Some(outf) = matches.value_of("out_file") {
             let mut file = OpenOptions::new()
@@ -447,8 +444,8 @@ fn optimize(matches: clap::ArgMatches) {
             // Stats to write: original runtime, optimized runtime, saturation time, extraction time,
             // number of nodes, number of eclasses, number of possible programs
             let data = json!({
-                "original": time_start,
-                "optimized": time_ext,
+                // "original": time_start,
+                // "optimized": time_ext,
                 "saturation": sat_duration.as_secs_f32(),
                 "extraction": ext_secs,
                 "nodes": num_enodes,
@@ -605,29 +602,29 @@ fn get_stats(egraph: &EGraph<Mdl, TensorAnalysis>) -> (usize, usize, f32, usize,
     )
 }
 
-fn get_full_graph_runtime(runner: &Runner<Mdl, TensorAnalysis, ()>, process: bool) -> f32 {
-    let mut g = runner.egraph.analysis.graph.borrow_mut();
-    unsafe {
-        // This is calling TASO's preprocess_weights function before evaluating full graph
-        // run time. It removes op that has only weights as its inputs. Since TASO only cares
-        // about inference time, such ops can be pre-computed
-        if process {
-            let processed_g = g.preprocess_weights();
-            // (*processed_g).export_to_file_raw(CString::new("/usr/tensat/optimized.onnx").unwrap().into_raw());
-            (*processed_g).run()
-        } else {
-            //(*g).export_to_file_raw(CString::new("/usr/tensat/orig.onnx").unwrap().into_raw());
-            (*g).run()
-        }
-    }
-}
+// fn get_full_graph_runtime(runner: &Runner<Mdl, TensorAnalysis, ()>, process: bool) -> f32 {
+//     let mut g = runner.egraph.analysis.graph.borrow_mut();
+//     unsafe {
+//         // This is calling TASO's preprocess_weights function before evaluating full graph
+//         // run time. It removes op that has only weights as its inputs. Since TASO only cares
+//         // about inference time, such ops can be pre-computed
+//         if process {
+//             let processed_g = g.preprocess_weights();
+//             // (*processed_g).export_to_file_raw(CString::new("/usr/tensat/optimized.onnx").unwrap().into_raw());
+//             (*processed_g).run()
+//         } else {
+//             //(*g).export_to_file_raw(CString::new("/usr/tensat/orig.onnx").unwrap().into_raw());
+//             (*g).run()
+//         }
+//     }
+// }
 
-fn save_model(runner: &Runner<Mdl, TensorAnalysis, ()>, file_name: &str) {
-    let mut g = runner.egraph.analysis.graph.borrow_mut();
-    unsafe {
-        (*g).export_to_file_raw(CString::new(file_name).unwrap().into_raw());
-    }
-}
+// fn save_model(runner: &Runner<Mdl, TensorAnalysis, ()>, file_name: &str) {
+//     let mut g = runner.egraph.analysis.graph.borrow_mut();
+//     unsafe {
+//         (*g).export_to_file_raw(CString::new(file_name).unwrap().into_raw());
+//     }
+// }
 
 fn prove_taso_rules(matches: clap::ArgMatches) {
     env_logger::init();
