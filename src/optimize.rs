@@ -46,8 +46,34 @@ impl CostModel {
     pub fn get_self_cost(&self, egraph: &EGraph<Mdl, TensorAnalysis>, enode: &Mdl) -> f32 {
         let x = |i: &Id| &egraph[*i].data;
         match enode {
-            // return cost for enode
-            _ => unimplemented!(),
+            Mdl::Int(_) | Mdl::Var(_) | Mdl::Input(_) => 0.0,
+            Mdl::CompareOp([inpt1, inpt2, _, cost]) => x(cost).val as f32,
+            Mdl::CompareOp([input1, input2, comparison, cost]) => x(cost).val as f32,
+            Mdl::BroadcastInDimOp([input, dimensions, cost]) => x(cost).val as f32,
+            Mdl::ConvertOp([input, cost]) => x(cost).val as f32,
+            Mdl::ReduceOp([input, dimensions, cost]) => x(cost).val as f32,
+            Mdl::ReshapeOp([input, shape, cost]) => x(cost).val as f32,
+            Mdl::GatherOp([input, start_indices, dimension_numbers, cost]) => x(cost).val as f32,
+            Mdl::SelectOp([pred, on_true, on_false, cost]) => x(cost).val as f32,
+            Mdl::ConcatenateOp([inputs, dimension, cost]) => x(cost).val as f32,
+            Mdl::DotGeneralOp([lhs, rhs, dot_dimension_numbers, cost]) => x(cost).val as f32,
+            Mdl::PadOp([input, padding_value, padding_config, cost]) => x(cost).val as f32,
+            Mdl::SliceOp([input, start_indices, limit_indices, strides, cost]) => x(cost).val as f32,
+            Mdl::TransposeOp([input, permutation, cost]) => x(cost).val as f32,
+            Mdl::MulOp([lhs, rhs, cost]) => x(cost).val as f32,
+            Mdl::AddOp([lhs, rhs, cost]) => x(cost).val as f32,
+            Mdl::DivOp([lhs, rhs, cost]) => x(cost).val as f32,
+            Mdl::SubtractOp([lhs, rhs, cost]) => x(cost).val as f32,
+            Mdl::MinOp([lhs, rhs, cost]) => x(cost).val as f32,
+            Mdl::MaxOp([lhs, rhs, cost]) => x(cost).val as f32,
+            Mdl::NegOp([input, cost]) => x(cost).val as f32,
+            Mdl::TanhOp([input, cost]) => x(cost).val as f32,
+            Mdl::ExpOp([input, cost]) => x(cost).val as f32,
+            Mdl::IotaOp([input, cost]) => x(cost).val as f32,
+            Mdl::ConstantOp([value, cost]) => x(cost).val as f32,
+            Mdl::DynamicUpdateSliceOp([operand, update, start_indices, cost]) => x(cost).val as f32,
+            Mdl::DynamicSliceOp([operand, start_indices, slice_sizes, cost]) => x(cost).val as f32,
+            Mdl::ScatterOp([input, scatter_indices, updates, dimension_numbers, cost]) => x(cost).val as f32
         }
     }  
 }

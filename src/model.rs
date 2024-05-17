@@ -76,8 +76,9 @@ impl Default for DataKind {
 /// Metadata struct for TensorAnalysis
 #[derive(Debug, Clone)]
 pub struct ValTnsr {
-    /// The cost of this eclass
-    pub cost: f32,
+    // This is the cost of the op
+    pub val: i32,
+    pub cost: i32,
 }
 
 /// Struct for metadata analysis
@@ -113,10 +114,6 @@ impl Analysis<Mdl> for TensorAnalysis {
     fn make(egraph: &EGraph<Mdl, Self>, enode: &Mdl) -> Self::Data {
         let x = |i: &Id| &egraph[*i].data;
 
-        // we shouldn't need this anymore... although
-        // I'm starting to think that we're blackboxing
-        // the ops too much
-
         // let dim_from_name = |name: &Id| {
         //     let name_vec: Vec<&str> = x(name).name.split("@").collect();
         //     assert!(name_vec.len() == 2);
@@ -128,32 +125,34 @@ impl Analysis<Mdl> for TensorAnalysis {
         // };
 
         match enode {
-          Mdl::CompareOp([input1, input2, comparison, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::BroadcastInDimOp([input, dimensions, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::ConvertOp([input, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::ReduceOp([input, dimensions, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::ReshapeOp([input, shape, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::GatherOp([input, start_indices, dimension_numbers, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::SelectOp([pred, on_true, on_false, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::ConcatenateOp([inputs, dimension, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::DotGeneralOp([lhs, rhs, dot_dimension_numbers, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::PadOp([input, padding_value, padding_config, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::SliceOp([input, start_indices, limit_indices, strides, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::TransposeOp([input, permutation, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::MulOp([lhs, rhs, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::AddOp([lhs, rhs, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::DivOp([lhs, rhs, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::SubtractOp([lhs, rhs, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::MinOp([lhs, rhs, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::MaxOp([lhs, rhs, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::NegOp([input, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::TanhOp([input, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::ExpOp([input, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::IotaOp([input, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::ConstantOp([value, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::DynamicUpdateSliceOp([operand, update, start_indices, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::DynamicSliceOp([operand, start_indices, slice_sizes, cost]) => Self::Data { cost: x(cost).cost },
-          Mdl::ScatterOp([input, scatter_indices, updates, dimension_numbers, cost]) => Self::Data { cost: x(cost).cost },
+          Mdl::Var(_) => Self::Data { val: 0, cost: 0 }, /* we might need a name field... */
+          Mdl::Int(i) => Self::Data { val: *i, cost: 0 },
+          Mdl::CompareOp([input1, input2, comparison, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::BroadcastInDimOp([input, dimensions, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::ConvertOp([input, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::ReduceOp([input, dimensions, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::ReshapeOp([input, shape, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::GatherOp([input, start_indices, dimension_numbers, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::SelectOp([pred, on_true, on_false, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::ConcatenateOp([inputs, dimension, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::DotGeneralOp([lhs, rhs, dot_dimension_numbers, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::PadOp([input, padding_value, padding_config, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::SliceOp([input, start_indices, limit_indices, strides, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::TransposeOp([input, permutation, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::MulOp([lhs, rhs, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::AddOp([lhs, rhs, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::DivOp([lhs, rhs, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::SubtractOp([lhs, rhs, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::MinOp([lhs, rhs, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::MaxOp([lhs, rhs, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::NegOp([input, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::TanhOp([input, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::ExpOp([input, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::IotaOp([input, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::ConstantOp([value, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::DynamicUpdateSliceOp([operand, update, start_indices, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::DynamicSliceOp([operand, start_indices, slice_sizes, cost]) => Self::Data { val: 0, cost: x(cost).val },
+          Mdl::ScatterOp([input, scatter_indices, updates, dimension_numbers, cost]) => Self::Data { val: 0, cost: x(cost).val },
           _ => unimplemented!(),
       }
     }
