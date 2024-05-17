@@ -80,5 +80,5 @@ int main() {
 
     current = &*graph->noop(*current, *tmp);
     
-    graph->pretty_print_rec_expr(100);
+    graph->print_rec_expr();
 }

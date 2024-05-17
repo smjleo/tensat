@@ -5,13 +5,8 @@ use std::env::*;
 use std::fs::*;
 use std::time::*;
 use std::time::{Duration, Instant};
-use tensat::bert;
 use tensat::model::*;
-use tensat::nasneta;
-use tensat::nasrnn;
 use tensat::optimize::*;
-use tensat::resnet50;
-use tensat::resnext50;
 use tensat::rewrites::*;
 use tensat::{parse::*, verify::*};
 
@@ -244,11 +239,11 @@ fn optimize(matches: clap::ArgMatches) {
     let rules = rules_from_str(split_rules, do_filter_after);
 
     let start = match matches.value_of("model") {
-        Some("resnet50") => resnet50::get_resnet50(),
-        Some("nasrnn") => nasrnn::get_nasrnn(),
-        Some("resnext50") => resnext50::get_resnext50(),
-        Some("bert") => bert::get_bert(),
-        Some("nasneta") => nasneta::get_nasneta(),
+        // Some("resnet50") => resnet50::get_resnet50(),
+        // Some("nasrnn") => nasrnn::get_nasrnn(),
+        // Some("resnext50") => resnext50::get_resnext50(),
+        // Some("bert") => bert::get_bert(),
+        // Some("nasneta") => nasneta::get_nasneta(),
         // Some("inceptionv3") => inceptionv3::get_inceptionv3(),
         // Some("mobilenetv2") => mobilenetv2::get_mobilenetv2(),
         // Some("vgg") => vgg::get_vgg(),
@@ -383,9 +378,7 @@ fn optimize(matches: clap::ArgMatches) {
     } else {
         // Run extraction
         let extract_mode = matches.value_of("extract").unwrap();
-        let cost_model = CostModel::with_setting(
-            /*ignore_all_weight_only=*/ matches.is_present("all_weight_only"),
-        );
+        let cost_model = CostModel::default();
         let (best, ext_secs) = match extract_mode {
             "ilp" => extract_by_ilp(&egraph, root, &matches, &cost_model),
             "greedy" => {

@@ -23,20 +23,10 @@ impl CostFunction<Mdl> for TensorCost<'_> {
 }
 
 /// Class for our cost model
-pub struct CostModel {
-    /// To have zero cost for all weight op only
-    ignore_all_weight_only: bool,
-    /// Discount factor for all weight ops
-    all_weight_discount: f32,
-}
+#[derive(Default)]
+pub struct CostModel {}
 
 impl CostModel {
-    pub fn with_setting(ignore_all_weight_only: bool) -> Self {
-        CostModel {
-            ignore_all_weight_only: ignore_all_weight_only,
-            all_weight_discount: 1.0,
-        }
-    }
 
     /// Gets cost for the enode itself.
     ///
@@ -56,22 +46,7 @@ impl CostModel {
     pub fn get_self_cost(&self, egraph: &EGraph<Mdl, TensorAnalysis>, enode: &Mdl) -> f32 {
         let x = |i: &Id| &egraph[*i].data;
         match enode {
-            // Operations that were previously returning 0.0
-            Mdl::Num(_) | Mdl::Var(_) | Mdl::Input(_) | Mdl::Weight(_) | Mdl::Merge(_) |
-            Mdl::Split0(_) | Mdl::Split1(_) | Mdl::Reshape(_) | Mdl::Transpose(_) |
-            Mdl::Dropout(_) | Mdl::Noop(_) => 0.0,
-
-            // For other operations, return the cost directly
-            Mdl::Tanh(_a) => {
-                let data = x(_a);
-                let cost = data.cost;
-                if self.ignore_all_weight_only && data.all_weights {
-                    self.all_weight_discount * cost
-                } else {
-                    cost
-                }
-            }
-
+            // return cost for enode
             _ => unimplemented!(),
         }
     }  

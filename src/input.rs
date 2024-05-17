@@ -6,75 +6,43 @@ use cxx::{CxxVector};
 
 const MAX_DIM: usize = 8;
 
-// let's turn the ffi on later for easier debugging
 #[cxx::bridge]
 mod ffi {
-    extern "Rust" {
-        type CppGraphConverter;
-        type TensorInfo;
-
-        fn new_converter() -> Box<CppGraphConverter>;
-        fn new_input(self: &mut CppGraphConverter, dims: &[i32]) -> Box<TensorInfo>;
-        fn new_weight(self: &mut CppGraphConverter, dims: &[i32]) -> Box<TensorInfo>;
-        fn conv2d(
-            self: &mut CppGraphConverter,
-            inpt: &TensorInfo,
-            wght: &TensorInfo,
-            stride_h: i32,
-            stride_w: i32,
-            padding: i32,
-            activation: i32,
-        ) -> Box<TensorInfo>;
-        fn dropout(self: &mut CppGraphConverter, inpt: &TensorInfo) -> Box<TensorInfo>;
-        fn relu(self: &mut CppGraphConverter, inpt: &TensorInfo) -> Box<TensorInfo>;
-        fn tanh(self: &mut CppGraphConverter, inpt: &TensorInfo) -> Box<TensorInfo>;
-        fn sigmoid(self: &mut CppGraphConverter, inpt: &TensorInfo) -> Box<TensorInfo>;
-        fn batchnorm(
-            self: &mut CppGraphConverter, 
-            inpt: &TensorInfo, 
-            scale: &TensorInfo, 
-            bias: &TensorInfo, 
-            mean: &TensorInfo, 
-            var: &TensorInfo, 
-        ) -> Box<TensorInfo>;
-        fn add(self: &mut CppGraphConverter, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo>;
-        fn matmul(self: &mut CppGraphConverter, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo>;
-        fn mul(self: &mut CppGraphConverter, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo>;
-        fn concat(
-            self: &mut CppGraphConverter,
-            axis: i32,
-            ndim: i32,
-            inpt_1: &TensorInfo,
-            inpt_2: &TensorInfo,
-        ) -> Box<TensorInfo>;
-        // TODO
-        // fn concat_multi(self: &mut CppGraphConverter, axis: i32, inputs: &[&TensorInfo]) -> Box<TensorInfo>;
-        fn maxpool2d(
-            self: &mut CppGraphConverter,
-            inpt: &TensorInfo,
-            kernel_h: i32,
-            kernel_w: i32,
-            stride_h: i32,
-            stride_w: i32,
-            padding: i32,
-        ) -> Box<TensorInfo>;
-        fn avgpool2d(
-            self: &mut CppGraphConverter,
-            inpt: &TensorInfo,
-            kernel_h: i32,
-            kernel_w: i32,
-            stride_h: i32,
-            stride_w: i32,
-            padding: i32,
-        ) -> Box<TensorInfo>;
-        fn enlarge(self: &mut CppGraphConverter, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo>;
-        fn split(self: &mut CppGraphConverter, axis: i32, inpt: &TensorInfo) -> Vec<TensorInfo>;
-        fn reshape(self: &mut CppGraphConverter, inpt: &TensorInfo, shape: &[i32]) -> Box<TensorInfo>;
-        fn transpose(self: &mut CppGraphConverter, inpt: &TensorInfo, perm: &[i32], shuffle: bool) -> Box<TensorInfo>;
-        fn noop(self: &mut CppGraphConverter, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo>;
-        
-        fn print_rec_expr(self: &CppGraphConverter);
-        fn pretty_print_rec_expr(self: &CppGraphConverter, width: i32);
+  extern "Rust" {
+    type CppGraphConverter;
+    type TensorInfo;
+    fn new_converter() -> Box<CppGraphConverter>;
+    // Exposing the constructor functions with Box<TensorInfo>
+    fn new_input(self: &mut CppGraphConverter, dims: &[i32]) -> Box<TensorInfo>;
+    fn new_compare_op(self: &mut CppGraphConverter, inpt_1: Box<TensorInfo>, inpt_2: Box<TensorInfo>, comparison: i32, cost: i32) -> Box<TensorInfo>;
+    fn new_broadcast_in_dim(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, dimensions: &[i32], cost: i32) -> Box<TensorInfo>;
+    fn new_convert_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    fn new_reduce_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, dimensions: &[i32], cost: i32) -> Box<TensorInfo>;
+    fn new_reshape_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, shape: &[i32], cost: i32) -> Box<TensorInfo>;
+    fn new_gather_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, start_indices: Box<TensorInfo>, dimension_numbers: i32, cost: i32) -> Box<TensorInfo>;
+    fn new_select_op(self: &mut CppGraphConverter, pred: Box<TensorInfo>, on_true: Box<TensorInfo>, on_false: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    // fn new_concatenate_op(self: &mut CppGraphConverter, inputs: &[Box<TensorInfo>], dimension: i32, cost: i32) -> Box<TensorInfo>;
+    fn new_dot_general_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, dot_dimension_numbers: i32, cost: i32) -> Box<TensorInfo>;
+    fn new_pad_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, padding_value: i32, padding_config: &[i32], cost: i32) -> Box<TensorInfo>;
+    fn new_slice_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, start_indices: &[i32], limit_indices: &[i32], strides: &[i32], cost: i32) -> Box<TensorInfo>;
+    fn new_transpose_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, permutation: &[i32], cost: i32) -> Box<TensorInfo>;
+    fn new_mul_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    fn new_add_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    fn new_div_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    fn new_subtract_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    fn new_min_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    fn new_max_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    fn new_neg_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    fn new_tanh_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    fn new_exp_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    fn new_iota_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    fn new_constant_op(self: &mut CppGraphConverter, value: i32, cost: i32) -> Box<TensorInfo>;
+    fn new_dynamic_update_slice_op(self: &mut CppGraphConverter, operand: Box<TensorInfo>, update: Box<TensorInfo>, start_indices: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    fn new_dynamic_slice_op(self: &mut CppGraphConverter, operand: Box<TensorInfo>, start_indices: Box<TensorInfo>, slice_sizes: i32, cost: i32) -> Box<TensorInfo>;
+    fn new_scatter_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, scatter_indices: Box<TensorInfo>, updates: Box<TensorInfo>, dimension_numbers: i32, cost: i32) -> Box<TensorInfo>;
+    
+    fn print_rec_expr(self: &CppGraphConverter);
+    fn pretty_print_rec_expr(self: &CppGraphConverter, width: i32);
     }
 }
 
@@ -90,629 +58,508 @@ pub struct TensorInfo {
     pub n_dim: usize,
 }
 
-#[derive(Default)]
-pub struct CppGraphConverter {
-    gc: GraphConverter,
-}
-
-pub fn new_converter() -> Box<CppGraphConverter> {
-    Box::new(CppGraphConverter::default())
-}
-
-impl CppGraphConverter {
-    pub fn new_input(&mut self, dims: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.gc.new_input(dims))
-    }
-
-    pub fn new_weight(&mut self, dims: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.gc.new_weight(dims))
-    }
-
-    pub fn conv2d(
-        &mut self,
-        inpt: &TensorInfo,
-        wght: &TensorInfo,
-        stride_h: i32,
-        stride_w: i32,
-        padding: i32,
-        activation: i32,
-    ) -> Box<TensorInfo> {
-        Box::new(self.gc.conv2d(*inpt, *wght, stride_h, stride_w, padding, activation))
-    }
-
-    pub fn dropout(&mut self, inpt: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.gc.dropout(*inpt))
-    }
-
-    pub fn relu(&mut self, inpt: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.gc.relu(*inpt))
-    }
-
-    pub fn tanh(&mut self, inpt: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.gc.tanh(*inpt))
-    }
-
-    pub fn sigmoid(&mut self, inpt: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.gc.sigmoid(*inpt))
-    }
-
-    pub fn batchnorm(
-        &mut self, 
-        inpt: &TensorInfo, 
-        scale: &TensorInfo, 
-        bias: &TensorInfo, 
-        mean: &TensorInfo, 
-        var: &TensorInfo, 
-    ) -> Box<TensorInfo> {
-        Box::new(self.gc.batchnorm(*inpt, *scale, *bias, *mean, *var))
-    }
-
-    pub fn add(&mut self, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.gc.add(*inpt_1, *inpt_2))
-    }
-
-    pub fn matmul(&mut self, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.gc.matmul(*inpt_1, *inpt_2))
-    }
-
-    pub fn mul(&mut self, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.gc.mul(*inpt_1, *inpt_2))
-    }
-
-    pub fn concat(
-        &mut self,
-        axis: i32,
-        ndim: i32,
-        inpt_1: &TensorInfo,
-        inpt_2: &TensorInfo
-    ) -> Box<TensorInfo> {
-        Box::new(self.gc.concat(axis, ndim, *inpt_1, *inpt_2))
-    }
-
-    pub fn concat_multi(&mut self, axis: i32, inputs: &[&TensorInfo]) -> Box<TensorInfo> {
-        let x = inputs.iter().map(|b| **b).collect_vec();
-        Box::new(self.gc.concat_multi(axis, &x))
-    }
-
-    pub fn maxpool2d(
-        &mut self,
-        inpt: &TensorInfo, 
-        kernel_h: i32,
-        kernel_w: i32,
-        stride_h: i32,
-        stride_w: i32,
-        padding: i32,
-    ) -> Box<TensorInfo> {
-        Box::new(self.gc.maxpool2d(*inpt, kernel_h, kernel_w, stride_h, stride_w, padding))
-    }
-
-    pub fn avgpool2d(
-        &mut self,
-        inpt: &TensorInfo, 
-        kernel_h: i32,
-        kernel_w: i32,
-        stride_h: i32,
-        stride_w: i32,
-        padding: i32,
-    ) -> Box<TensorInfo> {
-        Box::new(self.gc.avgpool2d(*inpt, kernel_h, kernel_w, stride_h, stride_w, padding))
-    }
-
-    pub fn enlarge(&mut self, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.gc.enlarge(*inpt_1, *inpt_2))
-    }
-
-    pub fn split(&mut self, axis: i32, inpt: &TensorInfo) -> Vec<TensorInfo> {
-        let (a, b) = self.gc.split(axis, *inpt);
-        vec![a, b] 
-    }
-
-    pub fn reshape(&mut self, inpt: &TensorInfo, shape: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.gc.reshape(*inpt, shape))
-    }
-
-    pub fn transpose(&mut self, inpt: &TensorInfo, perm: &[i32], shuffle: bool) -> Box<TensorInfo> {
-        Box::new(self.gc.transpose(*inpt, perm, shuffle))
-    }
-
-    pub fn noop(&mut self, inpt_1: &TensorInfo, inpt_2: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.gc.noop(*inpt_1, *inpt_2))
-    }
-
-    pub fn print_rec_expr(&self) {
-        println!("{:?}", &self.gc.rec_expr)
-    }
-
-    pub fn pretty_print_rec_expr(&self, width: i32) {
-        println!("{}", &self.gc.rec_expr.pretty(width as usize))
-    }
-}
-
-
 /// Struct for converting a model specified using our Rust interface to RecExpr
 ///
 /// The RecExpr is growed on the fly when member functions are called. Uses a
 /// Hashmap to store the map of scalar nodes to their indices into the RexExpr to
 /// avoid replication.
 #[derive(Default)]
-pub struct GraphConverter {
+pub struct CppGraphConverter {
     rec_expr: RecExpr<Mdl>,
     scalar_map: HashMap<i32, Id>,
     name_gen: NameGen,
 }
 
+pub fn new_converter() -> Box<CppGraphConverter> {
+  Box::new(CppGraphConverter::default())
+}
+
 /// The APIs of GraphConverter are (intended to) match TASO's so that we can easily
 /// construct TASO graphs using this class
-impl GraphConverter {
-    /// Gets the RexExpr after graph is constructed
-    pub fn rec_expr(self) -> RecExpr<Mdl> {
-        self.rec_expr
-    }
+impl CppGraphConverter {
+  pub fn rec_expr(self) -> RecExpr<Mdl> {
+      self.rec_expr
+  }
 
-    /// Takes in the parameters for the new input, construct the node in RexExpr,
-    /// return the Id (index) of this input node in the RecExpr. This is the
-    /// pattern for all these op functions.
-    pub fn new_input(&mut self, dims: &[i32]) -> TensorInfo {
-        let name = self.name_gen.new_input_name() + "@" + &dims.iter().join("_");
-        let node = Mdl::Var(Symbol::from(name));
-        let name_id = self.rec_expr.add(node);
+  pub fn input(&mut self, dims: &[i32]) -> TensorInfo {
+      let name = self.name_gen.new_input_name() + "@" + &dims.iter().join("_");
+      let node = Mdl::Var(Symbol::from(name));
+      let name_id = self.rec_expr.add(node);
 
-        let new_node = Mdl::Input([name_id]);
-        let (shape, n_dim) = self.shape_from_dim(dims);
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape,
-            n_dim,
-        }
-    }
+      let new_node = Mdl::Input([name_id]);
+      let (shape, n_dim) = self.shape_from_dim(dims);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape,
+          n_dim,
+      }
+  }
 
-    pub fn new_weight(&mut self, dims: &[i32]) -> TensorInfo {
-        let name = self.name_gen.new_weight_name() + "@" + &dims.iter().join("_");
-        let node = Mdl::Var(Symbol::from(name));
-        let name_id = self.rec_expr.add(node);
+  pub fn compare_op(&mut self, inpt_1: TensorInfo, inpt_2: TensorInfo, comparison: i32, cost: i32) -> TensorInfo {
+      let comparison_id = self.add_or_get_val(comparison);
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::CompareOp([inpt_1.id, inpt_2.id, comparison_id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt_1.n_dim,
+      }
+  }
 
-        let new_node = Mdl::Weight([name_id]);
-        let (shape, n_dim) = self.shape_from_dim(dims);
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape,
-            n_dim,
-        }
-    }
+  pub fn broadcast_in_dim(&mut self, inpt: TensorInfo, dimensions: &[i32], cost: i32) -> TensorInfo {
+      let dim_name = &dimensions.iter().join("_");
+      let node = Mdl::Var(Symbol::from(dim_name));
+      let dimensions_id = self.rec_expr.add(node);
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::BroadcastInDimOp([inpt.id, dimensions_id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt.n_dim,
+      }
+  }
 
-    pub fn conv2d(
-        &mut self,
-        inpt: TensorInfo,
-        wght: TensorInfo,
-        stride_h: i32,
-        stride_w: i32,
-        padding: i32,
-        activation: i32,
-    ) -> TensorInfo {
-        let stride_h_id = self.add_or_get_val(stride_h);
-        let stride_w_id = self.add_or_get_val(stride_w);
-        let padding_id = self.add_or_get_val(padding);
-        let activation_id = self.add_or_get_val(activation);
+  pub fn convert_op(&mut self, inpt: TensorInfo, cost: i32) -> TensorInfo {
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::ConvertOp([inpt.id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt.n_dim,
+      }
+  }
 
-        let new_node = Mdl::Conv2d([
-            stride_h_id,
-            stride_w_id,
-            padding_id,
-            activation_id,
-            inpt.id,
-            wght.id,
-        ]);
+  pub fn reduce_op(&mut self, inpt: TensorInfo, dimensions: &[i32], cost: i32) -> TensorInfo {
+      let dim_name = &dimensions.iter().join("_");
+      let node = Mdl::Var(Symbol::from(dim_name));
+      let dimensions_id = self.rec_expr.add(node);
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::ReduceOp([inpt.id, dimensions_id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt.n_dim,
+      }
+  }
 
-        // Get shape
-        let mut shape = [0; MAX_DIM];
-        let input_h = inpt.shape[2];
-        let input_w = inpt.shape[3];
-        let kernel_h = wght.shape[2];
-        let kernel_w = wght.shape[3];
+  pub fn reshape_op(&mut self, inpt: TensorInfo, shape: &[i32], cost: i32) -> TensorInfo {
+      let shape_name = &shape.iter().join("_");
+      let node = Mdl::Var(Symbol::from(shape_name));
+      let shape_id = self.rec_expr.add(node);
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::ReshapeOp([inpt.id, shape_id, cost_id]);
+      let (shape_new, n_dim) = self.shape_from_dim(shape);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: shape_new,
+          n_dim: n_dim,
+      }
+  }
 
-        let (output_h, output_w) = self.get_conv_shape(
-            input_h, input_w, stride_h, stride_w, kernel_h, kernel_w, padding,
-        );
-        shape[0] = inpt.shape[0];
-        shape[1] = wght.shape[0];
-        shape[2] = output_h;
-        shape[3] = output_w;
+  pub fn gather_op(&mut self, inpt: TensorInfo, start_indices: TensorInfo, dimension_numbers: i32, cost: i32) -> TensorInfo {
+      let dimension_numbers_id = self.add_or_get_val(dimension_numbers);
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::GatherOp([inpt.id, start_indices.id, dimension_numbers_id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt.n_dim,
+      }
+  }
 
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape: shape,
-            n_dim: 4,
-        }
-    }
+  pub fn select_op(&mut self, pred: TensorInfo, on_true: TensorInfo, on_false: TensorInfo, cost: i32) -> TensorInfo {
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::SelectOp([pred.id, on_true.id, on_false.id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: on_true.shape,
+          n_dim: on_true.n_dim,
+      }
+  }
 
-    pub fn dropout(&mut self, inpt: TensorInfo) -> TensorInfo {
-        let new_node = Mdl::Dropout(inpt.id);
+  // pub fn concatenate_op(&mut self, inputs: &[TensorInfo], dimension: i32, cost: i32) -> TensorInfo {
+  //   let n_inputs = inputs.len();
+  //   assert!(n_inputs > 0);
+  //   let dimension_id = &[self.add_or_get_val(dimension)];
+  //   let cost_id = &[self.add_or_get_val(cost)];
+  //   let input_ids: Vec<Id> = inputs.iter().map(|x| x.id).collect();
+  //   let new_node = Mdl::ConcatenateOp([input_ids, dimension_id, cost_id]);
+  //   let mut shape = inputs[0].shape;
+  //   shape[dimension as usize] = inputs.iter().map(|x| x.shape[dimension as usize]).sum();
+  //   TensorInfo {
+  //     id: self.rec_expr.add(new_node),
+  //     shape,
+  //     n_dim: inputs[0].n_dim,
+  //   }
+  // }
 
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            ..inpt
-        }
-    }
+  pub fn dot_general_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, dot_dimension_numbers: i32, cost: i32) -> TensorInfo {
+      let dot_dimension_numbers_id = self.add_or_get_val(dot_dimension_numbers);
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::DotGeneralOp([lhs.id, rhs.id, dot_dimension_numbers_id, cost_id]);
+      let mut shape = lhs.shape;
+      shape[shape.len() - 1] = rhs.shape[rhs.shape.len() - 1];
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape,
+          n_dim: lhs.n_dim,
+      }
+  }
 
-    pub fn relu(&mut self, inpt: TensorInfo) -> TensorInfo {
-        let new_node = Mdl::Relu(inpt.id);
+  pub fn pad_op(&mut self, inpt: TensorInfo, padding_value: i32, padding_config: &[i32], cost: i32) -> TensorInfo {
+      let padding_value_id = self.add_or_get_val(padding_value);
+      let padding_config_name = &padding_config.iter().join("_");
+      let node = Mdl::Var(Symbol::from(padding_config_name));
+      let padding_config_id = self.rec_expr.add(node);
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::PadOp([inpt.id, padding_value_id, padding_config_id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt.n_dim,
+      }
+  }
 
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            ..inpt
-        }
-    }
+  pub fn slice_op(&mut self, inpt: TensorInfo, start_indices: &[i32], limit_indices: &[i32], strides: &[i32], cost: i32) -> TensorInfo {
+      let start_indices_name = &start_indices.iter().join("_");
+      let start_indices_node = Mdl::Var(Symbol::from(start_indices_name));
+      let start_indices_id = self.rec_expr.add(start_indices_node);
+      let limit_indices_name = &limit_indices.iter().join("_");
+      let limit_indices_node = Mdl::Var(Symbol::from(limit_indices_name));
+      let limit_indices_id = self.rec_expr.add(limit_indices_node);
+      let strides_name = &strides.iter().join("_");
+      let strides_node = Mdl::Var(Symbol::from(strides_name));
+      let strides_id = self.rec_expr.add(strides_node);
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::SliceOp([inpt.id, start_indices_id, limit_indices_id, strides_id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt.n_dim,
+      }
+  }
 
-    pub fn tanh(&mut self, inpt: TensorInfo) -> TensorInfo {
-        let new_node = Mdl::Tanh(inpt.id);
+  pub fn transpose_op(&mut self, inpt: TensorInfo, permutation: &[i32], cost: i32) -> TensorInfo {
+      let permutation_name = &permutation.iter().join("_");
+      let node = Mdl::Var(Symbol::from(permutation_name));
+      let permutation_id = self.rec_expr.add(node);
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::TransposeOp([inpt.id, permutation_id, cost_id]);
+      let mut shape = [0; MAX_DIM];
+      let n_dim = inpt.n_dim;
+      for (i, &perm_i) in permutation.iter().enumerate() {
+          shape[i] = inpt.shape[perm_i as usize];
+      }
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape,
+          n_dim,
+      }
+  }
 
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            ..inpt
-        }
-    }
+  pub fn mul_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, cost: i32) -> TensorInfo {
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::MulOp([lhs.id, rhs.id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: lhs.shape, // This is an example, you might want to calculate actual shape
+          n_dim: lhs.n_dim,
+      }
+  }
 
-    pub fn sigmoid(&mut self, inpt: TensorInfo) -> TensorInfo {
-        let new_node = Mdl::Sigmoid(inpt.id);
+  pub fn add_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, cost: i32) -> TensorInfo {
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::AddOp([lhs.id, rhs.id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: lhs.shape, // This is an example, you might want to calculate actual shape
+          n_dim: lhs.n_dim,
+      }
+  }
 
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            ..inpt
-        }
-    }
+  pub fn div_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, cost: i32) -> TensorInfo {
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::DivOp([lhs.id, rhs.id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: lhs.shape, // This is an example, you might want to calculate actual shape
+          n_dim: lhs.n_dim,
+      }
+  }
 
-    pub fn batchnorm(&mut self, inpt: TensorInfo, scale: TensorInfo, bias: TensorInfo, mean: TensorInfo, var: TensorInfo) -> TensorInfo {
-        let new_node = Mdl::BatchNorm([inpt.id, scale.id, bias.id, mean.id, var.id]);
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            ..inpt
-        }
-    }
+  pub fn subtract_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, cost: i32) -> TensorInfo {
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::SubtractOp([lhs.id, rhs.id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: lhs.shape, // This is an example, you might want to calculate actual shape
+          n_dim: lhs.n_dim,
+      }
+  }
 
-    pub fn add(&mut self, inpt_1: TensorInfo, inpt_2: TensorInfo) -> TensorInfo {
-        let new_node = Mdl::Ewadd([inpt_1.id, inpt_2.id]);
+  pub fn min_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, cost: i32) -> TensorInfo {
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::MinOp([lhs.id, rhs.id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: lhs.shape, // This is an example, you might want to calculate actual shape
+          n_dim: lhs.n_dim,
+      }
+  }
 
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            ..inpt_1
-        }
-    }
+  pub fn max_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, cost: i32) -> TensorInfo {
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::MaxOp([lhs.id, rhs.id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: lhs.shape, // This is an example, you might want to calculate actual shape
+          n_dim: lhs.n_dim,
+      }
+  }
 
-    pub fn matmul(&mut self, inpt_1: TensorInfo, inpt_2: TensorInfo) -> TensorInfo {
-        let activation = ACTNONE;
-        let act_id = self.add_or_get_val(activation);
+  pub fn neg_op(&mut self, inpt: TensorInfo, cost: i32) -> TensorInfo {
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::NegOp([inpt.id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt.n_dim,
+      }
+  }
 
-        let new_node = Mdl::Matmul([act_id, inpt_1.id, inpt_2.id]);
+  pub fn tanh_op(&mut self, inpt: TensorInfo, cost: i32) -> TensorInfo {
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::TanhOp([inpt.id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt.n_dim,
+      }
+  }
 
-        let mut shape = inpt_1.shape;
-        let n_dim = inpt_1.n_dim;
-        shape[n_dim - 1] = inpt_2.shape[n_dim - 1];
+  pub fn exp_op(&mut self, inpt: TensorInfo, cost: i32) -> TensorInfo {
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::ExpOp([inpt.id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt.n_dim,
+      }
+  }
 
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape,
-            n_dim,
-        }
-    }
+  pub fn iota_op(&mut self, inpt: TensorInfo, cost: i32) -> TensorInfo {
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::IotaOp([inpt.id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt.n_dim,
+      }
+  }
 
-    pub fn mul(&mut self, inpt_1: TensorInfo, inpt_2: TensorInfo) -> TensorInfo {
-        let new_node = Mdl::Ewmul([inpt_1.id, inpt_2.id]);
+  pub fn constant_op(&mut self, value: i32, cost: i32) -> TensorInfo {
+      let value_id = self.add_or_get_val(value);
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::ConstantOp([value_id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: [1; MAX_DIM], // Assuming constant has a shape of [1]
+          n_dim: 1,
+      }
+  }
 
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            ..inpt_1
-        }
-    }
+  pub fn dynamic_update_slice_op(&mut self, operand: TensorInfo, update: TensorInfo, start_indices: TensorInfo, cost: i32) -> TensorInfo {
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::DynamicUpdateSliceOp([operand.id, update.id, start_indices.id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: operand.shape, // This is an example, you might want to calculate actual shape
+          n_dim: operand.n_dim,
+      }
+  }
 
-    pub fn concat(
-        &mut self,
-        axis: i32,
-        ndim: i32,
-        inpt_1: TensorInfo,
-        inpt_2: TensorInfo,
-    ) -> TensorInfo {
-        // Only support concat of 2 inputs for now
-        // To support more, pass in a slice and create more concat nodes here
-        let axis_id = self.add_or_get_val(axis);
-        let ndim_id = self.add_or_get_val(ndim);
+  pub fn dynamic_slice_op(&mut self, operand: TensorInfo, start_indices: TensorInfo, slice_sizes: i32, cost: i32) -> TensorInfo {
+      let slice_sizes_id = self.add_or_get_val(slice_sizes);
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::DynamicSliceOp([operand.id, start_indices.id, slice_sizes_id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: operand.shape, // This is an example, you might want to calculate actual shape
+          n_dim: operand.n_dim,
+      }
+  }
 
-        let new_node = Mdl::Concat([axis_id, ndim_id, inpt_1.id, inpt_2.id]);
+  pub fn scatter_op(&mut self, inpt: TensorInfo, scatter_indices: TensorInfo, updates: TensorInfo, dimension_numbers: i32, cost: i32) -> TensorInfo {
+      let dimension_numbers_id = self.add_or_get_val(dimension_numbers);
+      let cost_id = self.add_or_get_val(cost);
+      let new_node = Mdl::ScatterOp([inpt.id, scatter_indices.id, updates.id, dimension_numbers_id, cost_id]);
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt.n_dim,
+      }
+  }
 
-        let mut shape = inpt_1.shape;
-        let n_dim = inpt_1.n_dim;
-        shape[axis as usize] += inpt_2.shape[axis as usize];
+  fn add_or_get_val(&mut self, val: i32) -> Id {
+      match self.scalar_map.get(&val) {
+          Some(id) => *id,
+          None => {
+              let node = Mdl::Int(val);
+              let id = self.rec_expr.add(node);
+              self.scalar_map.insert(val, id);
+              id
+          }
+      }
+  }
 
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape,
-            n_dim,
-        }
-    }
+  fn shape_from_dim(&self, dims: &[i32]) -> ([i32; MAX_DIM], usize) {
+      let mut shape = [0; MAX_DIM];
+      for (i, dim) in dims.iter().enumerate() {
+          shape[i] = *dim;
+      }
+      (shape, dims.len())
+  }
 
-    pub fn concat_multi(&mut self, axis: i32, inputs: &[TensorInfo]) -> TensorInfo {
-        let n_inputs = inputs.len();
-        // We can add supports for other number of inputs later when needed.
-        // We need to add a new Concat op for each number of inputs
-        assert!(n_inputs <= 5);
+  fn get_conv_shape(
+      &self,
+      input_h: i32,
+      input_w: i32,
+      stride_h: i32,
+      stride_w: i32,
+      kernel_h: i32,
+      kernel_w: i32,
+      padding: i32,
+  ) -> (i32, i32) {
+      if padding == PSAME {
+          let output_h = (input_h + stride_h - 1) / stride_h;
+          let output_w = (input_w + stride_w - 1) / stride_w;
+          (output_h, output_w)
+      } else {
+          let output_h = (input_h - kernel_h) / stride_h + 1;
+          let output_w = (input_w - kernel_w) / stride_w + 1;
+          (output_h, output_w)
+      }
+  }
 
-        let n_dim = inputs[0].n_dim;
-        let axis_id = self.add_or_get_val(axis);
-        let ndim_id = self.add_or_get_val(n_dim as i32);
+  // Wrapper functions for C++ side
+  pub fn new_input(&mut self, dims: &[i32]) -> Box<TensorInfo> {
+      Box::new(self.input(dims))
+  }
 
-        let new_node = match n_inputs {
-            2 => {
-                Mdl::Concat([
-                   axis_id,
-                   ndim_id,
-                   inputs[0].id,
-                   inputs[1].id,
-                ])
-            }
-            3 => {
-                Mdl::Concat3([
-                   axis_id,
-                   ndim_id,
-                   inputs[0].id,
-                   inputs[1].id,
-                   inputs[2].id,
-                ])
-            }
-            4 => {
-                Mdl::Concat4([
-                   axis_id,
-                   ndim_id,
-                   inputs[0].id,
-                   inputs[1].id,
-                   inputs[2].id,
-                   inputs[3].id,
-                ])
-            }
-            5 => {
-                Mdl::Concat5([
-                   axis_id,
-                   ndim_id,
-                   inputs[0].id,
-                   inputs[1].id,
-                   inputs[2].id,
-                   inputs[3].id,
-                   inputs[4].id,
-                ])
-            }
-            _ => panic!("Number of input for concat not supported"),
-        };
+  pub fn new_compare_op(&mut self, inpt_1: Box<TensorInfo>, inpt_2: Box<TensorInfo>, comparison: i32, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.compare_op(*inpt_1, *inpt_2, comparison, cost))
+  }
 
-        let mut shape = inputs[0].shape;
-        shape[axis as usize] += (1..n_inputs)
-            .map(|i| inputs[i].shape[axis as usize])
-            .sum::<i32>();
+  pub fn new_broadcast_in_dim(&mut self, inpt: Box<TensorInfo>, dimensions: &[i32], cost: i32) -> Box<TensorInfo> {
+      Box::new(self.broadcast_in_dim(*inpt, dimensions, cost))
+  }
 
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape,
-            n_dim,
-        }
-    }
+  pub fn new_convert_op(&mut self, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.convert_op(*inpt, cost))
+  }
 
-    pub fn maxpool2d(
-        &mut self,
-        inpt: TensorInfo,
-        kernel_h: i32,
-        kernel_w: i32,
-        stride_h: i32,
-        stride_w: i32,
-        padding: i32,
-    ) -> TensorInfo {
-        let kernel_h_id = self.add_or_get_val(kernel_h);
-        let kernel_w_id = self.add_or_get_val(kernel_w);
-        let stride_h_id = self.add_or_get_val(stride_h);
-        let stride_w_id = self.add_or_get_val(stride_w);
-        let padding_id = self.add_or_get_val(padding);
-        let activation = ACTNONE;
-        let act_id = self.add_or_get_val(activation);
+  pub fn new_reduce_op(&mut self, inpt: Box<TensorInfo>, dimensions: &[i32], cost: i32) -> Box<TensorInfo> {
+      Box::new(self.reduce_op(*inpt, dimensions, cost))
+  }
 
-        let new_node = Mdl::Poolmax([
-            inpt.id,
-            kernel_h_id,
-            kernel_w_id,
-            stride_h_id,
-            stride_w_id,
-            padding_id,
-            act_id,
-        ]);
+  pub fn new_reshape_op(&mut self, inpt: Box<TensorInfo>, shape: &[i32], cost: i32) -> Box<TensorInfo> {
+      Box::new(self.reshape_op(*inpt, shape, cost))
+  }
 
-        // Get shape
-        let mut shape = [0; MAX_DIM];
-        let input_h = inpt.shape[2];
-        let input_w = inpt.shape[3];
+  pub fn new_gather_op(&mut self, inpt: Box<TensorInfo>, start_indices: Box<TensorInfo>, dimension_numbers: i32, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.gather_op(*inpt, *start_indices, dimension_numbers, cost))
+  }
 
-        let (output_h, output_w) = self.get_conv_shape(
-            input_h, input_w, stride_h, stride_w, kernel_h, kernel_w, padding,
-        );
-        shape[0] = inpt.shape[0];
-        shape[1] = inpt.shape[1];
-        shape[2] = output_h;
-        shape[3] = output_w;
+  pub fn new_select_op(&mut self, pred: Box<TensorInfo>, on_true: Box<TensorInfo>, on_false: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.select_op(*pred, *on_true, *on_false, cost))
+  }
 
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape: shape,
-            n_dim: 4,
-        }
-    }
+  // pub fn new_concatenate_op(&mut self, inputs: &[Box<TensorInfo>], dimension: i32, cost: i32) -> Box<TensorInfo> {
+  //     let unboxed_inputs: Vec<TensorInfo> = inputs.iter().map(|x| **x).collect();
+  //     Box::new(self.concatenate_op(&unboxed_inputs, dimension, cost))
+  // }
 
-    pub fn avgpool2d(
-        &mut self,
-        inpt: TensorInfo,
-        kernel_h: i32,
-        kernel_w: i32,
-        stride_h: i32,
-        stride_w: i32,
-        padding: i32,
-    ) -> TensorInfo {
-        let kernel_h_id = self.add_or_get_val(kernel_h);
-        let kernel_w_id = self.add_or_get_val(kernel_w);
-        let stride_h_id = self.add_or_get_val(stride_h);
-        let stride_w_id = self.add_or_get_val(stride_w);
-        let padding_id = self.add_or_get_val(padding);
-        let activation = ACTNONE;
-        let act_id = self.add_or_get_val(activation);
+  pub fn new_dot_general_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, dot_dimension_numbers: i32, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.dot_general_op(*lhs, *rhs, dot_dimension_numbers, cost))
+  }
 
-        let new_node = Mdl::Poolavg([
-            inpt.id,
-            kernel_h_id,
-            kernel_w_id,
-            stride_h_id,
-            stride_w_id,
-            padding_id,
-            act_id,
-        ]);
+  pub fn new_pad_op(&mut self, inpt: Box<TensorInfo>, padding_value: i32, padding_config: &[i32], cost: i32) -> Box<TensorInfo> {
+      Box::new(self.pad_op(*inpt, padding_value, padding_config, cost))
+  }
 
-        // Get shape
-        let mut shape = [0; MAX_DIM];
-        let input_h = inpt.shape[2];
-        let input_w = inpt.shape[3];
+  pub fn new_slice_op(&mut self, inpt: Box<TensorInfo>, start_indices: &[i32], limit_indices: &[i32], strides: &[i32], cost: i32) -> Box<TensorInfo> {
+      Box::new(self.slice_op(*inpt, start_indices, limit_indices, strides, cost))
+  }
 
-        let (output_h, output_w) = self.get_conv_shape(
-            input_h, input_w, stride_h, stride_w, kernel_h, kernel_w, padding,
-        );
-        shape[0] = inpt.shape[0];
-        shape[1] = inpt.shape[1];
-        shape[2] = output_h;
-        shape[3] = output_w;
+  pub fn new_transpose_op(&mut self, inpt: Box<TensorInfo>, permutation: &[i32], cost: i32) -> Box<TensorInfo> {
+      Box::new(self.transpose_op(*inpt, permutation, cost))
+  }
 
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape: shape,
-            n_dim: 4,
-        }
-    }
+  pub fn new_mul_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.mul_op(*lhs, *rhs, cost))
+  }
 
-    pub fn enlarge(&mut self, inpt_1: TensorInfo, inpt_2: TensorInfo) -> TensorInfo {
-        let mut shape = inpt_1.shape;
-        shape[2] = inpt_2.shape[2];
-        shape[3] = inpt_2.shape[3];
+  pub fn new_add_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.add_op(*lhs, *rhs, cost))
+  }
 
-        let new_node = Mdl::Enlarge([inpt_1.id, inpt_2.id]);
+  pub fn new_div_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.div_op(*lhs, *rhs, cost))
+  }
 
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape: shape,
-            n_dim: 4,
-        }
-    }
+  pub fn new_subtract_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.subtract_op(*lhs, *rhs, cost))
+  }
 
-    pub fn split(&mut self, axis: i32, inpt: TensorInfo) -> (TensorInfo, TensorInfo) {
-        let axis_id = self.add_or_get_val(axis);
+  pub fn new_min_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.min_op(*lhs, *rhs, cost))
+  }
 
-        let split_node = Mdl::Split([axis_id, inpt.id]);
-        let split_id = self.rec_expr.add(split_node);
-        let split_0_node = Mdl::Split0(split_id);
-        let split_0_id = self.rec_expr.add(split_0_node);
-        let split_1_node = Mdl::Split1(split_id);
-        let split_1_id = self.rec_expr.add(split_1_node);
+  pub fn new_max_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.max_op(*lhs, *rhs, cost))
+  }
 
-        assert!(false, "Shape inference not implemented for split");
+  pub fn new_neg_op(&mut self, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.neg_op(*inpt, cost))
+  }
 
-        let out_0 = TensorInfo {
-            id: split_0_id,
-            shape: [0; MAX_DIM],
-            n_dim: inpt.n_dim,
-        };
-        let out_1 = TensorInfo {
-            id: split_1_id,
-            shape: [0; MAX_DIM],
-            n_dim: inpt.n_dim,
-        };
-        (out_0, out_1)
-    }
+  pub fn new_tanh_op(&mut self, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.tanh_op(*inpt, cost))
+  }
 
-    pub fn reshape(&mut self, inpt: TensorInfo, shape: &[i32]) -> TensorInfo {
-        let shape_name = &shape.iter().join("_");
-        let node = Mdl::Var(Symbol::from(shape_name));
-        let shape_name_id = self.rec_expr.add(node);
+  pub fn new_exp_op(&mut self, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.exp_op(*inpt, cost))
+  }
 
-        let new_node = Mdl::Reshape([inpt.id, shape_name_id]);
-        let (shape_new, n_dim) = self.shape_from_dim(shape);
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape: shape_new,
-            n_dim: n_dim,
-        }
-    }
+  pub fn new_iota_op(&mut self, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.iota_op(*inpt, cost))
+  }
 
-    pub fn transpose(&mut self, inpt: TensorInfo, perm: &[i32], shuffle: bool) -> TensorInfo {
-        let perm_name = &perm.iter().join("_");
-        let node = Mdl::Var(Symbol::from(perm_name));
-        let perm_name_id = self.rec_expr.add(node);
+  pub fn new_constant_op(&mut self, value: i32, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.constant_op(value, cost))
+  }
 
-        let shuffle_val = if shuffle { SHUFFLE } else { NOSHUFFLE };
-        let shuffle_id = self.add_or_get_val(shuffle_val);
+  pub fn new_dynamic_update_slice_op(&mut self, operand: Box<TensorInfo>, update: Box<TensorInfo>, start_indices: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.dynamic_update_slice_op(*operand, *update, *start_indices, cost))
+  }
 
-        let new_node = Mdl::Transpose([inpt.id, perm_name_id, shuffle_id]);
+  pub fn new_dynamic_slice_op(&mut self, operand: Box<TensorInfo>, start_indices: Box<TensorInfo>, slice_sizes: i32, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.dynamic_slice_op(*operand, *start_indices, slice_sizes, cost))
+  }
 
-        let mut shape = [0; MAX_DIM];
-        let n_dim = inpt.n_dim;
-        for (i, perm_i) in perm.iter().enumerate() {
-            shape[i] = inpt.shape[*perm_i as usize];
-        }
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape,
-            n_dim,
-        }
-    }
+  pub fn new_scatter_op(&mut self, inpt: Box<TensorInfo>, scatter_indices: Box<TensorInfo>, updates: Box<TensorInfo>, dimension_numbers: i32, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.scatter_op(*inpt, *scatter_indices, *updates, dimension_numbers, cost))
+  }
 
-    pub fn noop(&mut self, inpt_1: TensorInfo, inpt_2: TensorInfo) -> TensorInfo {
-        let new_node = Mdl::Noop([inpt_1.id, inpt_2.id]);
-        TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape: [0; MAX_DIM],
-            n_dim: inpt_1.n_dim,
-        }
-    }
+  pub fn print_rec_expr(&self) {
+      println!("{:?}", self.rec_expr)
+  }
 
-    /// If a scalar value is in the RecExpr, gets the Id. Otherwise creates one.
-    fn add_or_get_val(&mut self, val: i32) -> Id {
-        match self.scalar_map.get(&val) {
-            Some(id) => *id,
-            None => {
-                let node = Mdl::Num(val);
-                let id = self.rec_expr.add(node);
-                self.scalar_map.insert(val, id);
-                id
-            }
-        }
-    }
-
-    fn shape_from_dim(&self, dims: &[i32]) -> ([i32; MAX_DIM], usize) {
-        let mut shape = [0; MAX_DIM];
-        for (i, dim) in dims.iter().enumerate() {
-            shape[i] = *dim;
-        }
-        (shape, dims.len())
-    }
-
-    fn get_conv_shape(
-        &self,
-        input_h: i32,
-        input_w: i32,
-        stride_h: i32,
-        stride_w: i32,
-        kernel_h: i32,
-        kernel_w: i32,
-        padding: i32,
-    ) -> (i32, i32) {
-        if padding == PSAME {
-            let output_h = (input_h + stride_h - 1) / stride_h;
-            let output_w = (input_w + stride_w - 1) / stride_w;
-            (output_h, output_w)
-        } else {
-            let output_h = (input_h - kernel_h) / stride_h + 1;
-            let output_w = (input_w - kernel_w) / stride_w + 1;
-            (output_h, output_w)
-        }
-    }
+  pub fn pretty_print_rec_expr(&self, width: i32) {
+      println!("{}", self.rec_expr.pretty(width as usize))
+  }
 }
+
 
 /// Struct for generating new names for weight tensors in the model
 ///

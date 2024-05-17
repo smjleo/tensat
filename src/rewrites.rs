@@ -190,11 +190,11 @@ impl Applier<Mdl, TensorAnalysis> for CheckApply {
                 return vec![];
             }
         }
-        let (valid, _, _, existing) = check_pat(
+        let (valid, _, existing) = check_pat(
             self.pat.ast.as_ref(),
             egraph,
             subst,
-            /*get_exist_nodes=*/ self.filter_after,
+            self.filter_after,
         );
         if valid {
             let result = self.pat.apply_one(egraph, matched_id, subst);
@@ -304,36 +304,21 @@ fn check_pat(
     egraph: &mut EGraph<Mdl, TensorAnalysis>,
     subst: &Subst,
     get_exist_nodes: bool,
-) -> (bool, Option<Id>, TData, Option<HashSet<Mdl>>) {
+) -> (bool, Option<Id>, Option<HashSet<Mdl>>) {
     match pat.last().unwrap() {
         ENodeOrVar::Var(w) => {
             // The root node is a variable, then use subst to get metadata from egraph
             let cid = subst[*w];
-            let t_data = if egraph[cid].data.dtype == DataKind::Tnsr {
-                TData {
-                    dtype: egraph[cid].data.dtype,
-                    val: egraph[cid].data.val
-                }
-            } else {
-                // A variable cannot refer to a TnsrTuple, so we don't need that case
-                TData {
-                    dtype: egraph[cid].data.dtype,
-                    val: egraph[cid].data.val,
-                    // We don't need the actual tensors anymore since we're cutting out TASO
-                    // tnsr: None,
-                    // tnsr_2: None,
-                }
-            };
             if get_exist_nodes {
-                return (true, Some(cid), t_data, Some(HashSet::<Mdl>::new()));
+                return (true, Some(cid), Some(HashSet::<Mdl>::new()));
             } else {
-                return (true, Some(cid), t_data, None);
+                return (true, Some(cid), None);
             }
         }
         ENodeOrVar::ENode(e) => {
             // The root is an enode. Recursively get checking results from its children
             let children = e.children();
-            let results: Vec<(bool, Option<Id>, TData, Option<HashSet<Mdl>>)> = children
+            let results: Vec<(bool, Option<Id>, Option<HashSet<Mdl>>)> = children
                 .iter()
                 .map(|child| {
                     check_pat(
@@ -353,8 +338,7 @@ fn check_pat(
                 }
             }
             if violated {
-                let default_data: TData = Default::default();
-                return (false, None, default_data, None);
+                return (false, None, None);
             } else {
                 // Check if all children are in egraph
                 let mut all_in = true;
@@ -377,73 +361,33 @@ fn check_pat(
                     let looked = egraph.lookup(new_e.clone());
                     if let Some(id) = looked {
                         // Get metadata from egraph
-                        let t_data = match egraph[id].data.dtype {
-                            DataKind::Tnsr => TData {
-                                dtype: egraph[id].data.dtype,
-                                val: egraph[id].data.val
-                            },
-                            DataKind::TnsrTuple => TData {
-                                dtype: egraph[id].data.dtype,
-                                val: egraph[id].data.val
-                            },
-                            _ => TData {
-                                dtype: egraph[id].data.dtype,
-                                val: egraph[id].data.val
-                            },
-                        };
                         if get_exist_nodes {
                             let mut existing_nodes = HashSet::<Mdl>::new();
                             for res in results.iter() {
-                                for node in res.3.as_ref().unwrap().iter() {
+                                for node in res.2.as_ref().unwrap().iter() {
                                     existing_nodes.insert(node.clone());
                                 }
                             }
                             existing_nodes.insert(new_e);
-                            return (true, looked, t_data, Some(existing_nodes));
+                            return (true, looked, Some(existing_nodes));
                         } else {
-                            return (true, looked, t_data, None);
+                            return (true, looked, None);
                         }
                     }
                 }
                 let result = match e {
-                    Mdl::Num(_n) => {
-                        let t_data = TData {
-                            dtype: DataKind::Scalar,
-                            val: *_n
-                        };
-                        (true, None, t_data)
-                    }
-
-                    Mdl::Tanh(_a) => {
-                        let a_t_data = &results[0].2;
-                        assert!(a_t_data.dtype == DataKind::Tnsr);
-                        // In this case it's impossible to have an invalid op
-                        // but for the others we might want to copy over TASO's
-                        // shape checking and other checks? Although I don't see
-                        // why we would need to do that, the correctness of the 
-                        // substitution should be guaranteed by the EGraph
-                        let t_data = TData {
-                            dtype: DataKind::Tnsr,
-                            val: 0,
-                        };
-                        (true, None, t_data)
-                    }
-
-                    other => {
-                        println!("{:?}", other);
-                        todo!()
-                    }
+                    _ => (true, None)
                 };
                 if get_exist_nodes && result.0 {
                     let mut existing_nodes = HashSet::<Mdl>::new();
                     for res in results.iter() {
-                        for node in res.3.as_ref().unwrap().iter() {
+                        for node in res.2.as_ref().unwrap().iter() {
                             existing_nodes.insert(node.clone());
                         }
                     }
-                    return (result.0, result.1, result.2, Some(existing_nodes));
+                    return (result.0, result.1, Some(existing_nodes));
                 } else {
-                    return (result.0, result.1, result.2, None);
+                    return (result.0, result.1, None);
                 }
             }
         }
@@ -715,13 +659,13 @@ impl MultiPatterns {
                     }
 
                     // check_pat on both dst patterns
-                    let (valid_1, _, _, existing_1) = check_pat(
+                    let (valid_1, _, existing_1) = check_pat(
                         rule.2.ast.as_ref(),
                         &mut runner.egraph,
                         &merged_subst,
                         /*get_exist_nodes=*/ self.filter_after,
                     );
-                    let (valid_2, _, _, existing_2) = check_pat(
+                    let (valid_2, _, existing_2) = check_pat(
                         rule.3.ast.as_ref(),
                         &mut runner.egraph,
                         &merged_subst,
