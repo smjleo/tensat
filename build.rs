@@ -1,7 +1,6 @@
-use cxx_build;
-
 fn main() {
     println!("cargo:rerun-if-changed=src/input.rs");
+    println!("cargo:rerun-if-changed=src/graph.cc");
     println!("cargo:rerun-if-changed=include/tensat.h");
 
     // C++ graph input bindings

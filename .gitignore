@@ -1,3 +1,5 @@
+BUILD/
+egg/
 /target
 todo.txt
 manual_rules.txt

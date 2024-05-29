@@ -15,33 +15,33 @@ mod ffi {
     fn new_converter() -> Box<CppGraphConverter>;
     // Exposing the constructor functions with Box<TensorInfo>
     fn new_input(self: &mut CppGraphConverter, dims: &[i32]) -> Box<TensorInfo>;
-    fn new_compare_op(self: &mut CppGraphConverter, inpt_1: Box<TensorInfo>, inpt_2: Box<TensorInfo>, comparison: i32, cost: i32) -> Box<TensorInfo>;
-    fn new_broadcast_in_dim(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, dimensions: &[i32], cost: i32) -> Box<TensorInfo>;
-    fn new_convert_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
-    fn new_reduce_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, dimensions: &[i32], cost: i32) -> Box<TensorInfo>;
-    fn new_reshape_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, shape: &[i32], cost: i32) -> Box<TensorInfo>;
-    fn new_gather_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, start_indices: Box<TensorInfo>, dimension_numbers: i32, cost: i32) -> Box<TensorInfo>;
-    fn new_select_op(self: &mut CppGraphConverter, pred: Box<TensorInfo>, on_true: Box<TensorInfo>, on_false: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
-    // fn new_concatenate_op(self: &mut CppGraphConverter, inputs: &[Box<TensorInfo>], dimension: i32, cost: i32) -> Box<TensorInfo>;
-    fn new_dot_general_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, dot_dimension_numbers: i32, cost: i32) -> Box<TensorInfo>;
-    fn new_pad_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, padding_value: i32, padding_config: &[i32], cost: i32) -> Box<TensorInfo>;
-    fn new_slice_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, start_indices: &[i32], limit_indices: &[i32], strides: &[i32], cost: i32) -> Box<TensorInfo>;
-    fn new_transpose_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, permutation: &[i32], cost: i32) -> Box<TensorInfo>;
-    fn new_mul_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
-    fn new_add_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
-    fn new_div_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
-    fn new_subtract_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
-    fn new_min_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
-    fn new_max_op(self: &mut CppGraphConverter, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
-    fn new_neg_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
-    fn new_tanh_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
-    fn new_exp_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
-    fn new_iota_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
+    fn new_compare_op(self: &mut CppGraphConverter, inpt_1: &TensorInfo, inpt_2: &TensorInfo, comparison: i32, cost: i32) -> Box<TensorInfo>;
+    fn new_broadcast_in_dim(self: &mut CppGraphConverter, inpt: &TensorInfo, dimensions: &[i32], cost: i32) -> Box<TensorInfo>;
+    fn new_convert_op(self: &mut CppGraphConverter, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo>;
+    fn new_reduce_op(self: &mut CppGraphConverter, inpt: &TensorInfo, dimensions: &[i32], cost: i32) -> Box<TensorInfo>;
+    fn new_reshape_op(self: &mut CppGraphConverter, inpt: &TensorInfo, shape: &[i32], cost: i32) -> Box<TensorInfo>;
+    fn new_gather_op(self: &mut CppGraphConverter, inpt: &TensorInfo, start_indices: &TensorInfo, dimension_numbers: i32, cost: i32) -> Box<TensorInfo>;
+    fn new_select_op(self: &mut CppGraphConverter, pred: &TensorInfo, on_true: &TensorInfo, on_false: &TensorInfo, cost: i32) -> Box<TensorInfo>;
+    // fn new_concatenate_op(self: &mut CppGraphConverter, inputs: &[&TensorInfo], dimension: i32, cost: i32) -> Box<TensorInfo>;
+    fn new_dot_general_op(self: &mut CppGraphConverter, lhs: &TensorInfo, rhs: &TensorInfo, dot_dimension_numbers: i32, cost: i32) -> Box<TensorInfo>;
+    fn new_pad_op(self: &mut CppGraphConverter, inpt: &TensorInfo, padding_value: i32, padding_config: &[i32], cost: i32) -> Box<TensorInfo>;
+    fn new_slice_op(self: &mut CppGraphConverter, inpt: &TensorInfo, start_indices: &[i32], limit_indices: &[i32], strides: &[i32], cost: i32) -> Box<TensorInfo>;
+    fn new_transpose_op(self: &mut CppGraphConverter, inpt: &TensorInfo, permutation: &[i32], cost: i32) -> Box<TensorInfo>;
+    fn new_mul_op(self: &mut CppGraphConverter, lhs: &TensorInfo, rhs: &TensorInfo, cost: i32) -> Box<TensorInfo>;
+    fn new_add_op(self: &mut CppGraphConverter, lhs: &TensorInfo, rhs: &TensorInfo, cost: i32) -> Box<TensorInfo>;
+    fn new_div_op(self: &mut CppGraphConverter, lhs: &TensorInfo, rhs: &TensorInfo, cost: i32) -> Box<TensorInfo>;
+    fn new_subtract_op(self: &mut CppGraphConverter, lhs: &TensorInfo, rhs: &TensorInfo, cost: i32) -> Box<TensorInfo>;
+    fn new_min_op(self: &mut CppGraphConverter, lhs: &TensorInfo, rhs: &TensorInfo, cost: i32) -> Box<TensorInfo>;
+    fn new_max_op(self: &mut CppGraphConverter, lhs: &TensorInfo, rhs: &TensorInfo, cost: i32) -> Box<TensorInfo>;
+    fn new_neg_op(self: &mut CppGraphConverter, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo>;
+    fn new_tanh_op(self: &mut CppGraphConverter, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo>;
+    fn new_exp_op(self: &mut CppGraphConverter, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo>;
+    fn new_iota_op(self: &mut CppGraphConverter, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo>;
     fn new_constant_op(self: &mut CppGraphConverter, value: i32, cost: i32) -> Box<TensorInfo>;
-    fn new_dynamic_update_slice_op(self: &mut CppGraphConverter, operand: Box<TensorInfo>, update: Box<TensorInfo>, start_indices: Box<TensorInfo>, cost: i32) -> Box<TensorInfo>;
-    fn new_dynamic_slice_op(self: &mut CppGraphConverter, operand: Box<TensorInfo>, start_indices: Box<TensorInfo>, slice_sizes: i32, cost: i32) -> Box<TensorInfo>;
-    fn new_scatter_op(self: &mut CppGraphConverter, inpt: Box<TensorInfo>, scatter_indices: Box<TensorInfo>, updates: Box<TensorInfo>, dimension_numbers: i32, cost: i32) -> Box<TensorInfo>;
-    
+    fn new_dynamic_update_slice_op(self: &mut CppGraphConverter, operand: &TensorInfo, update: &TensorInfo, start_indices: &TensorInfo, cost: i32) -> Box<TensorInfo>;
+    fn new_dynamic_slice_op(self: &mut CppGraphConverter, operand: &TensorInfo, start_indices: &TensorInfo, slice_sizes: i32, cost: i32) -> Box<TensorInfo>;
+    fn new_scatter_op(self: &mut CppGraphConverter, inpt: &TensorInfo, scatter_indices: &TensorInfo, updates: &TensorInfo, dimension_numbers: i32, cost: i32) -> Box<TensorInfo>;
+
     fn print_rec_expr(self: &CppGraphConverter);
     fn pretty_print_rec_expr(self: &CppGraphConverter, width: i32);
     }
@@ -199,7 +199,7 @@ impl CppGraphConverter {
       }
   }
 
-  
+
   // Same bizarre calling convention as convert
   pub fn reshape_op(&mut self, inpt: TensorInfo, shape: &[i32], cost: i32) -> TensorInfo {
       let shape_name = &shape.iter().join("_");
@@ -487,92 +487,92 @@ impl CppGraphConverter {
       Box::new(self.input(dims))
   }
 
-  pub fn new_compare_op(&mut self, inpt_1: Box<TensorInfo>, inpt_2: Box<TensorInfo>, comparison: i32, cost: i32) -> Box<TensorInfo> {
+  pub fn new_compare_op(&mut self, inpt_1: &TensorInfo, inpt_2: &TensorInfo, comparison: i32, cost: i32) -> Box<TensorInfo> {
       Box::new(self.compare_op(*inpt_1, *inpt_2, comparison, cost))
   }
 
-  pub fn new_broadcast_in_dim(&mut self, inpt: Box<TensorInfo>, dimensions: &[i32], cost: i32) -> Box<TensorInfo> {
+  pub fn new_broadcast_in_dim(&mut self, inpt: &TensorInfo, dimensions: &[i32], cost: i32) -> Box<TensorInfo> {
       Box::new(self.broadcast_in_dim(*inpt, dimensions, cost))
   }
 
-  pub fn new_convert_op(&mut self, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+  pub fn new_convert_op(&mut self, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo> {
       Box::new(self.convert_op(*inpt, cost))
   }
 
-  pub fn new_reduce_op(&mut self, inpt: Box<TensorInfo>, dimensions: &[i32], cost: i32) -> Box<TensorInfo> {
+  pub fn new_reduce_op(&mut self, inpt: &TensorInfo, dimensions: &[i32], cost: i32) -> Box<TensorInfo> {
       Box::new(self.reduce_op(*inpt, dimensions, cost))
   }
 
-  pub fn new_reshape_op(&mut self, inpt: Box<TensorInfo>, shape: &[i32], cost: i32) -> Box<TensorInfo> {
+  pub fn new_reshape_op(&mut self, inpt: &TensorInfo, shape: &[i32], cost: i32) -> Box<TensorInfo> {
       Box::new(self.reshape_op(*inpt, shape, cost))
   }
 
-  pub fn new_gather_op(&mut self, inpt: Box<TensorInfo>, start_indices: Box<TensorInfo>, dimension_numbers: i32, cost: i32) -> Box<TensorInfo> {
+  pub fn new_gather_op(&mut self, inpt: &TensorInfo, start_indices: &TensorInfo, dimension_numbers: i32, cost: i32) -> Box<TensorInfo> {
       Box::new(self.gather_op(*inpt, *start_indices, dimension_numbers, cost))
   }
 
-  pub fn new_select_op(&mut self, pred: Box<TensorInfo>, on_true: Box<TensorInfo>, on_false: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+  pub fn new_select_op(&mut self, pred: &TensorInfo, on_true: &TensorInfo, on_false: &TensorInfo, cost: i32) -> Box<TensorInfo> {
       Box::new(self.select_op(*pred, *on_true, *on_false, cost))
   }
 
-  // pub fn new_concatenate_op(&mut self, inputs: &[Box<TensorInfo>], dimension: i32, cost: i32) -> Box<TensorInfo> {
+  // pub fn new_concatenate_op(&mut self, inputs: &[&TensorInfo], dimension: i32, cost: i32) -> Box<TensorInfo> {
   //     let unboxed_inputs: Vec<TensorInfo> = inputs.iter().map(|x| **x).collect();
   //     Box::new(self.concatenate_op(&unboxed_inputs, dimension, cost))
   // }
 
-  pub fn new_dot_general_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, dot_dimension_numbers: i32, cost: i32) -> Box<TensorInfo> {
+  pub fn new_dot_general_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, dot_dimension_numbers: i32, cost: i32) -> Box<TensorInfo> {
       Box::new(self.dot_general_op(*lhs, *rhs, dot_dimension_numbers, cost))
   }
 
-  pub fn new_pad_op(&mut self, inpt: Box<TensorInfo>, padding_value: i32, padding_config: &[i32], cost: i32) -> Box<TensorInfo> {
+  pub fn new_pad_op(&mut self, inpt: &TensorInfo, padding_value: i32, padding_config: &[i32], cost: i32) -> Box<TensorInfo> {
       Box::new(self.pad_op(*inpt, padding_value, padding_config, cost))
   }
 
-  pub fn new_slice_op(&mut self, inpt: Box<TensorInfo>, start_indices: &[i32], limit_indices: &[i32], strides: &[i32], cost: i32) -> Box<TensorInfo> {
+  pub fn new_slice_op(&mut self, inpt: &TensorInfo, start_indices: &[i32], limit_indices: &[i32], strides: &[i32], cost: i32) -> Box<TensorInfo> {
       Box::new(self.slice_op(*inpt, start_indices, limit_indices, strides, cost))
   }
 
-  pub fn new_transpose_op(&mut self, inpt: Box<TensorInfo>, permutation: &[i32], cost: i32) -> Box<TensorInfo> {
+  pub fn new_transpose_op(&mut self, inpt: &TensorInfo, permutation: &[i32], cost: i32) -> Box<TensorInfo> {
       Box::new(self.transpose_op(*inpt, permutation, cost))
   }
 
-  pub fn new_mul_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+  pub fn new_mul_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, cost: i32) -> Box<TensorInfo> {
       Box::new(self.mul_op(*lhs, *rhs, cost))
   }
 
-  pub fn new_add_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+  pub fn new_add_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, cost: i32) -> Box<TensorInfo> {
       Box::new(self.add_op(*lhs, *rhs, cost))
   }
 
-  pub fn new_div_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+  pub fn new_div_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, cost: i32) -> Box<TensorInfo> {
       Box::new(self.div_op(*lhs, *rhs, cost))
   }
 
-  pub fn new_subtract_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+  pub fn new_subtract_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, cost: i32) -> Box<TensorInfo> {
       Box::new(self.subtract_op(*lhs, *rhs, cost))
   }
 
-  pub fn new_min_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+  pub fn new_min_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, cost: i32) -> Box<TensorInfo> {
       Box::new(self.min_op(*lhs, *rhs, cost))
   }
 
-  pub fn new_max_op(&mut self, lhs: Box<TensorInfo>, rhs: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+  pub fn new_max_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, cost: i32) -> Box<TensorInfo> {
       Box::new(self.max_op(*lhs, *rhs, cost))
   }
 
-  pub fn new_neg_op(&mut self, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+  pub fn new_neg_op(&mut self, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo> {
       Box::new(self.neg_op(*inpt, cost))
   }
 
-  pub fn new_tanh_op(&mut self, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+  pub fn new_tanh_op(&mut self, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo> {
       Box::new(self.tanh_op(*inpt, cost))
   }
 
-  pub fn new_exp_op(&mut self, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+  pub fn new_exp_op(&mut self, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo> {
       Box::new(self.exp_op(*inpt, cost))
   }
 
-  pub fn new_iota_op(&mut self, inpt: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+  pub fn new_iota_op(&mut self, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo> {
       Box::new(self.iota_op(*inpt, cost))
   }
 
@@ -580,15 +580,15 @@ impl CppGraphConverter {
       Box::new(self.constant_op(value, cost))
   }
 
-  pub fn new_dynamic_update_slice_op(&mut self, operand: Box<TensorInfo>, update: Box<TensorInfo>, start_indices: Box<TensorInfo>, cost: i32) -> Box<TensorInfo> {
+  pub fn new_dynamic_update_slice_op(&mut self, operand: &TensorInfo, update: &TensorInfo, start_indices: &TensorInfo, cost: i32) -> Box<TensorInfo> {
       Box::new(self.dynamic_update_slice_op(*operand, *update, *start_indices, cost))
   }
 
-  pub fn new_dynamic_slice_op(&mut self, operand: Box<TensorInfo>, start_indices: Box<TensorInfo>, slice_sizes: i32, cost: i32) -> Box<TensorInfo> {
+  pub fn new_dynamic_slice_op(&mut self, operand: &TensorInfo, start_indices: &TensorInfo, slice_sizes: i32, cost: i32) -> Box<TensorInfo> {
       Box::new(self.dynamic_slice_op(*operand, *start_indices, slice_sizes, cost))
   }
 
-  pub fn new_scatter_op(&mut self, inpt: Box<TensorInfo>, scatter_indices: Box<TensorInfo>, updates: Box<TensorInfo>, dimension_numbers: i32, cost: i32) -> Box<TensorInfo> {
+  pub fn new_scatter_op(&mut self, inpt: &TensorInfo, scatter_indices: &TensorInfo, updates: &TensorInfo, dimension_numbers: i32, cost: i32) -> Box<TensorInfo> {
       Box::new(self.scatter_op(*inpt, *scatter_indices, *updates, dimension_numbers, cost))
   }
 

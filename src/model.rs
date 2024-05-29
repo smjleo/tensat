@@ -115,7 +115,6 @@ impl Analysis<Mdl> for TensorAnalysis {
         true
     }
 
-    // Constructs metadata for a new enode, using TASO side functions for tensors.
     fn make(egraph: &EGraph<Mdl, Self>, enode: &Mdl) -> Self::Data {
         let x = |i: &Id| &egraph[*i].data;
 
