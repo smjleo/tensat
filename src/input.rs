@@ -8,6 +8,7 @@ const MAX_DIM: usize = 8;
 
 #[cxx::bridge]
 mod ffi {
+  // take floats from c++ and wrap them into f32s below
   extern "Rust" {
     type CppGraphConverter;
     type TensorInfo;
@@ -95,7 +96,61 @@ impl CppGraphConverter {
       }
   }
 
+  pub fn blackbox_1(&mut self, inpt: TensorInfo, cpp_name: String) -> TensorInfo {
+      let new_node = Mdl::BlackBox_1([inpt.id]);
+      let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt.n_dim,
+      }
+  }
+
+  pub fn blackbox_2(&mut self, inpt_1: TensorInfo, inpt_2: TensorInfo, cpp_name: String) -> TensorInfo {
+      let new_node = Mdl::BlackBox_2([inpt_1.id, inpt_2.id]);
+      let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt_1.n_dim,
+      }
+  }
+
+  pub fn blackbox_3(&mut self, inpt_1: TensorInfo, inpt_2: TensorInfo, inpt_3: TensorInfo, cpp_name: String) -> TensorInfo {
+      let new_node = Mdl::BlackBox_3([inpt_1.id, inpt_2.id, inpt_3.id]);
+      let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt_1.n_dim,
+      }
+  }
+
+  pub fn blackbox_4(&mut self, inpt_1: TensorInfo, inpt_2: TensorInfo, inpt_3: TensorInfo, inpt_4: TensorInfo, cpp_name: String) -> TensorInfo {
+      let new_node = Mdl::BlackBox_4([inpt_1.id, inpt_2.id, inpt_3.id, inpt_4.id]);
+      let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt_1.n_dim,
+      }
+  }
+
+  pub fn blackbox_5(&mut self, inpt_1: TensorInfo, inpt_2: TensorInfo, inpt_3: TensorInfo, inpt_4: TensorInfo, inpt_5: TensorInfo, cpp_name: String) -> TensorInfo {
+      let new_node = Mdl::BlackBox_5([inpt_1.id, inpt_2.id, inpt_3.id, inpt_4.id, inpt_5.id]);
+      let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
+      TensorInfo {
+          id: self.rec_expr.add(new_node),
+          shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
+          n_dim: inpt_1.n_dim,
+      }
+  }
+
   pub fn compare_op(&mut self, inpt_1: TensorInfo, inpt_2: TensorInfo, comparison: i32, cost: i32) -> TensorInfo {
+      /*
+      comparison_direction: enum of EQ, NE, GE, GT, LE, and LT	
+      compare_type: enum of FLOAT, TOTALORDER, SIGNED, and UNSIGNED
+      */
       let comparison_id = self.add_or_get_val(comparison);
       let cost_id = self.add_or_get_val(cost);
       let new_node = Mdl::CompareOp([inpt_1.id, inpt_2.id, comparison_id, cost_id]);
@@ -119,6 +174,7 @@ impl CppGraphConverter {
       }
   }
 
+  // Weird calling convention: the result type is specified with a type annotation, and is NOT a parameter
   pub fn convert_op(&mut self, inpt: TensorInfo, cost: i32) -> TensorInfo {
       let cost_id = self.add_or_get_val(cost);
       let new_node = Mdl::ConvertOp([inpt.id, cost_id]);
@@ -129,6 +185,7 @@ impl CppGraphConverter {
       }
   }
 
+  // needs to take in a variadic number of input tensors
   pub fn reduce_op(&mut self, inpt: TensorInfo, dimensions: &[i32], cost: i32) -> TensorInfo {
       let dim_name = &dimensions.iter().join("_");
       let node = Mdl::Var(Symbol::from(dim_name));
@@ -142,6 +199,8 @@ impl CppGraphConverter {
       }
   }
 
+  
+  // Same bizarre calling convention as convert
   pub fn reshape_op(&mut self, inpt: TensorInfo, shape: &[i32], cost: i32) -> TensorInfo {
       let shape_name = &shape.iter().join("_");
       let node = Mdl::Var(Symbol::from(shape_name));
@@ -156,6 +215,8 @@ impl CppGraphConverter {
       }
   }
 
+  // https://github.com/openxla/stablehlo/blob/main/docs/spec.md#inputs-44
+  // Lots of inputs, we might want to investigate posisble rewrites and based on that decide how to implement this
   pub fn gather_op(&mut self, inpt: TensorInfo, start_indices: TensorInfo, dimension_numbers: i32, cost: i32) -> TensorInfo {
       let dimension_numbers_id = self.add_or_get_val(dimension_numbers);
       let cost_id = self.add_or_get_val(cost);
@@ -167,6 +228,7 @@ impl CppGraphConverter {
       }
   }
 
+  // 
   pub fn select_op(&mut self, pred: TensorInfo, on_true: TensorInfo, on_false: TensorInfo, cost: i32) -> TensorInfo {
       let cost_id = self.add_or_get_val(cost);
       let new_node = Mdl::SelectOp([pred.id, on_true.id, on_false.id, cost_id]);
@@ -418,27 +480,6 @@ impl CppGraphConverter {
           shape[i] = *dim;
       }
       (shape, dims.len())
-  }
-
-  fn get_conv_shape(
-      &self,
-      input_h: i32,
-      input_w: i32,
-      stride_h: i32,
-      stride_w: i32,
-      kernel_h: i32,
-      kernel_w: i32,
-      padding: i32,
-  ) -> (i32, i32) {
-      if padding == PSAME {
-          let output_h = (input_h + stride_h - 1) / stride_h;
-          let output_w = (input_w + stride_w - 1) / stride_w;
-          (output_h, output_w)
-      } else {
-          let output_h = (input_h - kernel_h) / stride_h + 1;
-          let output_w = (input_w - kernel_w) / stride_w + 1;
-          (output_h, output_w)
-      }
   }
 
   // Wrapper functions for C++ side

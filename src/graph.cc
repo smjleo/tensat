@@ -10,7 +10,7 @@ int main() {
     auto input_slice = rust::Slice<const int32_t>{dims, 2};
 
     auto inp = graphBox->new_input(input_slice);
-    auto relu = graphBox->relu(*inp);
+    auto relu = graphBox->new_tanh_op(*inp, 0);
 
     graphBox->print_rec_expr();
 }

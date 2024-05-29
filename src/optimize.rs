@@ -47,6 +47,7 @@ impl CostModel {
         let x = |i: &Id| &egraph[*i].data;
         match enode {
             Mdl::Int(_) | Mdl::Var(_) | Mdl::Input(_) => 0.0,
+            Mdl::BlackBox_1(_) | Mdl::BlackBox_2(_) | Mdl::BlackBox_3(_) | Mdl::BlackBox_4(_) | Mdl::BlackBox_5(_) => 0.0,
             Mdl::CompareOp([inpt1, inpt2, _, cost]) => x(cost).val as f32,
             Mdl::CompareOp([input1, input2, comparison, cost]) => x(cost).val as f32,
             Mdl::BroadcastInDimOp([input, dimensions, cost]) => x(cost).val as f32,
