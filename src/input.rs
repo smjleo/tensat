@@ -37,7 +37,7 @@ mod ffi {
     fn new_tanh_op(self: &mut CppGraphConverter, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo>;
     fn new_exp_op(self: &mut CppGraphConverter, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo>;
     fn new_iota_op(self: &mut CppGraphConverter, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo>;
-    fn new_constant_op(self: &mut CppGraphConverter, value: i32, cost: i32) -> Box<TensorInfo>;
+    fn new_constant_op(self: &mut CppGraphConverter, cost: i32) -> Box<TensorInfo>;
     fn new_dynamic_update_slice_op(self: &mut CppGraphConverter, operand: &TensorInfo, update: &TensorInfo, start_indices: &TensorInfo, cost: i32) -> Box<TensorInfo>;
     fn new_dynamic_slice_op(self: &mut CppGraphConverter, operand: &TensorInfo, start_indices: &TensorInfo, slice_sizes: i32, cost: i32) -> Box<TensorInfo>;
     fn new_scatter_op(self: &mut CppGraphConverter, inpt: &TensorInfo, scatter_indices: &TensorInfo, updates: &TensorInfo, dimension_numbers: i32, cost: i32) -> Box<TensorInfo>;
@@ -419,10 +419,9 @@ impl CppGraphConverter {
       }
   }
 
-  pub fn constant_op(&mut self, value: i32, cost: i32) -> TensorInfo {
-      let value_id = self.add_or_get_val(value);
+  pub fn constant_op(&mut self, cost: i32) -> TensorInfo {
       let cost_id = self.add_or_get_val(cost);
-      let new_node = Mdl::ConstantOp([value_id, cost_id]);
+      let new_node = Mdl::ConstantOp([cost_id]);
       TensorInfo {
           id: self.rec_expr.add(new_node),
           shape: [1; MAX_DIM], // Assuming constant has a shape of [1]
@@ -576,8 +575,8 @@ impl CppGraphConverter {
       Box::new(self.iota_op(*inpt, cost))
   }
 
-  pub fn new_constant_op(&mut self, value: i32, cost: i32) -> Box<TensorInfo> {
-      Box::new(self.constant_op(value, cost))
+  pub fn new_constant_op(&mut self, cost: i32) -> Box<TensorInfo> {
+      Box::new(self.constant_op(cost))
   }
 
   pub fn new_dynamic_update_slice_op(&mut self, operand: &TensorInfo, update: &TensorInfo, start_indices: &TensorInfo, cost: i32) -> Box<TensorInfo> {

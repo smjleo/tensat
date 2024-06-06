@@ -52,7 +52,7 @@ define_language! {
       "stablehlo.TanhOp"             = TanhOp([Id; 2]), // input, cost
       "stablehlo.ExpOp"              = ExpOp([Id; 2]), // input, cost
       "stablehlo.IotaOp"             = IotaOp([Id; 2]), // input, cost
-      "stablehlo.ConstantOp"         = ConstantOp([Id; 2]), // value, cost
+      "stablehlo.ConstantOp"         = ConstantOp([Id; 1]), // cost
       "stablehlo.DynamicUpdateSliceOp" = DynamicUpdateSliceOp([Id; 4]), // operand, update, start_indices, cost
       "stablehlo.DynamicSliceOp"     = DynamicSliceOp([Id; 4]), // operand, start_indices, slice_sizes, cost
       "stablehlo.ScatterOp"          = ScatterOp([Id; 5]), // input, scatter_indices, updates, dimension_numbers, cost

@@ -71,7 +71,7 @@ impl CostModel {
             Mdl::TanhOp([input, cost]) => x(cost).val as f32,
             Mdl::ExpOp([input, cost]) => x(cost).val as f32,
             Mdl::IotaOp([input, cost]) => x(cost).val as f32,
-            Mdl::ConstantOp([value, cost]) => x(cost).val as f32,
+            Mdl::ConstantOp([cost]) => x(cost).val as f32,
             Mdl::DynamicUpdateSliceOp([operand, update, start_indices, cost]) => x(cost).val as f32,
             Mdl::DynamicSliceOp([operand, start_indices, slice_sizes, cost]) => x(cost).val as f32,
             Mdl::ScatterOp([input, scatter_indices, updates, dimension_numbers, cost]) => x(cost).val as f32
