@@ -23,7 +23,7 @@ mod ffi {
     fn new_gather_op(self: &mut CppGraphConverter, inpt: &TensorInfo, start_indices: &TensorInfo, dimension_numbers: i32, cost: i32) -> Box<TensorInfo>;
     fn new_select_op(self: &mut CppGraphConverter, pred: &TensorInfo, on_true: &TensorInfo, on_false: &TensorInfo, cost: i32) -> Box<TensorInfo>;
     // fn new_concatenate_op(self: &mut CppGraphConverter, inputs: &[&TensorInfo], dimension: i32, cost: i32) -> Box<TensorInfo>;
-    fn new_dot_general_op(self: &mut CppGraphConverter, lhs: &TensorInfo, rhs: &TensorInfo, dot_dimension_numbers: i32, cost: i32) -> Box<TensorInfo>;
+    fn new_dot_general_op(self: &mut CppGraphConverter, lhs: &TensorInfo, rhs: &TensorInfo, lhs_batching_dimensions: &[i32], rhs_batching_dimensions: &[i32], lhs_contracting_dimensions: &[i32], rhs_contracting_dimensions: &[i32], precision_config: &[i32], cost: i32) -> Box<TensorInfo>;
     fn new_pad_op(self: &mut CppGraphConverter, inpt: &TensorInfo, padding_value: i32, padding_config: &[i32], cost: i32) -> Box<TensorInfo>;
     fn new_slice_op(self: &mut CppGraphConverter, inpt: &TensorInfo, start_indices: &[i32], limit_indices: &[i32], strides: &[i32], cost: i32) -> Box<TensorInfo>;
     fn new_transpose_op(self: &mut CppGraphConverter, inpt: &TensorInfo, permutation: &[i32], cost: i32) -> Box<TensorInfo>;
@@ -36,7 +36,7 @@ mod ffi {
     fn new_neg_op(self: &mut CppGraphConverter, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo>;
     fn new_tanh_op(self: &mut CppGraphConverter, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo>;
     fn new_exp_op(self: &mut CppGraphConverter, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo>;
-    fn new_iota_op(self: &mut CppGraphConverter, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo>;
+    fn new_iota_op(self: &mut CppGraphConverter, iota_dimension: i32, shape: &[i32], cost: i32) -> Box<TensorInfo>;
     fn new_constant_op(self: &mut CppGraphConverter, cost: i32) -> Box<TensorInfo>;
     fn new_dynamic_update_slice_op(self: &mut CppGraphConverter, operand: &TensorInfo, update: &TensorInfo, start_indices: &TensorInfo, cost: i32) -> Box<TensorInfo>;
     fn new_dynamic_slice_op(self: &mut CppGraphConverter, operand: &TensorInfo, start_indices: &TensorInfo, slice_sizes: i32, cost: i32) -> Box<TensorInfo>;
@@ -199,8 +199,6 @@ impl CppGraphConverter {
       }
   }
 
-
-  // Same bizarre calling convention as convert
   pub fn reshape_op(&mut self, inpt: TensorInfo, shape: &[i32], cost: i32) -> TensorInfo {
       let shape_name = &shape.iter().join("_");
       let node = Mdl::Var(Symbol::from(shape_name));
@@ -210,7 +208,7 @@ impl CppGraphConverter {
       let (shape_new, n_dim) = self.shape_from_dim(shape);
       TensorInfo {
           id: self.rec_expr.add(new_node),
-          shape: shape_new,
+          shape: shape_new, 
           n_dim: n_dim,
       }
   }
@@ -255,10 +253,20 @@ impl CppGraphConverter {
   //   }
   // }
 
-  pub fn dot_general_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, dot_dimension_numbers: i32, cost: i32) -> TensorInfo {
-      let dot_dimension_numbers_id = self.add_or_get_val(dot_dimension_numbers);
+  pub fn dot_general_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, lhs_batching_dimensions: &[i32], rhs_batching_dimensions: &[i32], lhs_contracting_dimensions: &[i32], rhs_contracting_dimensions: &[i32], precision_config: &[i32], cost: i32) -> TensorInfo {
+      // This produces ugly empty nodes when there's no batch dimension
+      let lhs_batch_dim_name = &lhs_batching_dimensions.iter().join("_");
+      let rhs_batch_dim_name = &rhs_batching_dimensions.iter().join("_");
+      let lhs_contract_dim_name = &lhs_contracting_dimensions.iter().join("_");
+      let rhs_contract_dim_name = &rhs_contracting_dimensions.iter().join("_");
+      let precision_config_name = &precision_config.iter().join("_");
+      let lhs_batch_dim_name_id = self.rec_expr.add(Mdl::Var(Symbol::from(lhs_batch_dim_name)));
+      let rhs_batch_dim_name_id = self.rec_expr.add(Mdl::Var(Symbol::from(lhs_batch_dim_name)));
+      let lhs_contract_dim_name_id = self.rec_expr.add(Mdl::Var(Symbol::from(lhs_contract_dim_name)));
+      let rhs_contract_dim_name_id = self.rec_expr.add(Mdl::Var(Symbol::from(rhs_contract_dim_name)));
+      let precision_config_id = self.rec_expr.add(Mdl::Var(Symbol::from(precision_config_name)));
       let cost_id = self.add_or_get_val(cost);
-      let new_node = Mdl::DotGeneralOp([lhs.id, rhs.id, dot_dimension_numbers_id, cost_id]);
+      let new_node = Mdl::DotGeneralOp([lhs.id, rhs.id, lhs_batch_dim_name_id, rhs_batch_dim_name_id, lhs_contract_dim_name_id, rhs_contract_dim_name_id, precision_config_id, cost_id]);
       let mut shape = lhs.shape;
       shape[shape.len() - 1] = rhs.shape[rhs.shape.len() - 1];
       TensorInfo {
@@ -409,13 +417,17 @@ impl CppGraphConverter {
       }
   }
 
-  pub fn iota_op(&mut self, inpt: TensorInfo, cost: i32) -> TensorInfo {
+  pub fn iota_op(&mut self, iota_dimension: i32, shape: &[i32], cost: i32) -> TensorInfo {
+      let iota_dim_id = self.add_or_get_val(iota_dimension);
       let cost_id = self.add_or_get_val(cost);
-      let new_node = Mdl::IotaOp([inpt.id, cost_id]);
+      let shape_name = &shape.iter().join("_");
+      let shape_id = self.rec_expr.add(Mdl::Var(Symbol::from(shape_name)));
+      let new_node = Mdl::IotaOp([iota_dim_id, shape_id, cost_id]);
+      let (shape_new, n_dim) = self.shape_from_dim(shape);
       TensorInfo {
           id: self.rec_expr.add(new_node),
-          shape: inpt.shape, // This is an example, you might want to calculate actual shape
-          n_dim: inpt.n_dim,
+          shape: shape_new, 
+          n_dim: n_dim,
       }
   }
 
@@ -474,6 +486,9 @@ impl CppGraphConverter {
   }
 
   fn shape_from_dim(&self, dims: &[i32]) -> ([i32; MAX_DIM], usize) {
+      if (dims.len() > MAX_DIM) {
+          println!("ERROR: op shape exceeds MAX_DIM! e-graph no longer valid.");
+      }
       let mut shape = [0; MAX_DIM];
       for (i, dim) in dims.iter().enumerate() {
           shape[i] = *dim;
@@ -519,8 +534,8 @@ impl CppGraphConverter {
   //     Box::new(self.concatenate_op(&unboxed_inputs, dimension, cost))
   // }
 
-  pub fn new_dot_general_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, dot_dimension_numbers: i32, cost: i32) -> Box<TensorInfo> {
-      Box::new(self.dot_general_op(*lhs, *rhs, dot_dimension_numbers, cost))
+  pub fn new_dot_general_op(self: &mut CppGraphConverter, lhs: &TensorInfo, rhs: &TensorInfo, lhs_batching_dimensions: &[i32], rhs_batching_dimensions: &[i32], lhs_contracting_dimensions: &[i32], rhs_contracting_dimensions: &[i32], precision_config: &[i32], cost: i32) -> Box<TensorInfo> {
+      Box::new(self.dot_general_op(*lhs, *rhs, lhs_batching_dimensions, rhs_batching_dimensions, lhs_contracting_dimensions, rhs_contracting_dimensions, precision_config, cost))
   }
 
   pub fn new_pad_op(&mut self, inpt: &TensorInfo, padding_value: i32, padding_config: &[i32], cost: i32) -> Box<TensorInfo> {
@@ -571,8 +586,8 @@ impl CppGraphConverter {
       Box::new(self.exp_op(*inpt, cost))
   }
 
-  pub fn new_iota_op(&mut self, inpt: &TensorInfo, cost: i32) -> Box<TensorInfo> {
-      Box::new(self.iota_op(*inpt, cost))
+  pub fn new_iota_op(&mut self, iota_dimension: i32, shape: &[i32], cost: i32) -> Box<TensorInfo> {
+      Box::new(self.iota_op(iota_dimension, shape, cost))
   }
 
   pub fn new_constant_op(&mut self, cost: i32) -> Box<TensorInfo> {
