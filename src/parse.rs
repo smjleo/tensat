@@ -5,7 +5,15 @@ use pest::{iterators::Pair, Parser};
 use std::collections::HashMap;
 
 #[derive(pest_derive::Parser)]
-#[grammar = "equation.pest"]
+// rules_rust doesn't seem to pick up equation.pest for some reason
+#[grammar_inline = r#"
+name = { (ASCII_ALPHANUMERIC | "_")+ }
+expr = { apply | name }
+apply = { name ~ "(" ~ args ~ ")" }
+args = { expr ~ ("," ~ expr)* }
+eq = { expr ~ "==" ~ expr }
+prog = { eq+ }
+"#]
 pub struct EqParser;
 
 pub fn parse_exp(e: Pair<Rule>) -> String {
