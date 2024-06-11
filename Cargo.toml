@@ -4,8 +4,6 @@ version = "0.1.0"
 authors = ["Remy Wang <remywang@uw.edu>"]
 edition = "2021"
 
-[workspace]
-
 [lib]
 crate-type = ["staticlib", "lib"]
 
