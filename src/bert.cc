@@ -1,5 +1,8 @@
+// NOTE: This model is for the original Tensat API, which is incompatible with the new StableHLO-based ops.
+// TODO: Change BERT model to use StableHLO ops
+
 #include "rust/cxx.h"
-#include "tensat/src/input.rs.h"
+#include "cxxbridge/deps/tensat/src/input.rs.h"
 #include <utility>
 #include <bits/stdc++.h>
 

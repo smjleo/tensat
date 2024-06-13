@@ -1,5 +1,5 @@
 #include "rust/cxx.h"
-#include "tensat/src/input.rs.h"
+#include "cxxbridge/deps/tensat/src/input.rs.h"
 #include <utility>
 #include <bits/stdc++.h>
 
