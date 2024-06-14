@@ -22,25 +22,28 @@ pub const ACTTANH: i32 = 3;
 pub const NOSHUFFLE: i32 = 0;
 pub const SHUFFLE: i32 = 1;
 
-// TODO: match stableHLO opset
-// TODO: add cost as parameter for each op
-
 define_language! {
   pub enum Mdl {
       Var(Symbol),
       Int(i32),
+      // note that the integer arg after the Id is the arity
       "input"                        = Input([Id; 1]),  // takes a Var, format: name@dim1_dim2...
-      "stablehlo.CompareOp"          = CompareOp([Id; 4]), // input1, input2, comparison
-      "stablehlo.BroadcastInDimOp"   = BroadcastInDimOp([Id; 3]), // input, dimensions
-      "stablehlo.ConvertOp"          = ConvertOp([Id; 2]), // input
-      "stablehlo.ReduceOp"           = ReduceOp([Id; 3]), // input, dimensions
+      "stablehlo.CompareOp"          = CompareOp([Id; 4]), // input1, input2, comparison_direction,
+                                                           // comparsion_type
+      "stablehlo.BroadcastInDimOp"   = BroadcastInDimOp([Id; 3]), // input, broadcast_dimensions
+      // TODO: we might need the input type as well.
+      "stablehlo.ConvertOp"          = ConvertOp([Id; 2]), // input, output_tyoe.
+      // TODO: we probably won't have any rewrites for reduces. Maybe function pointers for the
+      // body
+      "stablehlo.ReduceOp"           = ReduceOp([Id; 3]), // input, init_values, dimensions, body
       "stablehlo.ReshapeOp"          = ReshapeOp([Id; 3]), // input, shape
-      "stablehlo.GatherOp"           = GatherOp([Id; 4]), // input, start_indices, dimension_numbers
-      "stablehlo.SelectOp"           = SelectOp([Id; 4]), // pred, on_true, on_false
-      "stablehlo.ConcatenateOp"      = ConcatenateOp([Id; 3]), // inputs, dimension
+      "stablehlo.GatherOp"           = GatherOp([Id; 10]), 
+      "stablehlo.SelectOp"           = SelectOp([Id; 3]), // pred, on_true, on_false
+      "stablehlo.ConcatenateOp"      = ConcatenateOp([Id; 2]), // inputs, dimension
       "stablehlo.DotGeneralOp"       = DotGeneralOp([Id; 8]), // lhs, rhs... 
-      "stablehlo.PadOp"              = PadOp([Id; 4]), // input, padding_value, padding_config
-      "stablehlo.SliceOp"            = SliceOp([Id; 5]), // input, start_indices, limit_indices, strides
+      "stablehlo.PadOp"              = PadOp([Id; 5]), // input, padding_value, edge_padding_low,
+                                                       // edge_padding_high, interior_padding
+      "stablehlo.SliceOp"            = SliceOp([Id; 4]), // input, start_indices, limit_indices, strides
       "stablehlo.TransposeOp"        = TransposeOp([Id; 3]), // input, permutation
       // BINARY OPS
       "stablehlo.MulOp"              = MulOp([Id; 3]), 
@@ -54,10 +57,12 @@ define_language! {
       "stablehlo.TanhOp"             = TanhOp([Id; 2]), // input
       "stablehlo.ExpOp"              = ExpOp([Id; 2]), // input
       "stablehlo.IotaOp"             = IotaOp([Id; 3]), // iota_dimension, output_shape
-      "stablehlo.ConstantOp"         = ConstantOp([Id; 1]), // cost
+      "stablehlo.ConstantOp"         = ConstantOp([Id; 0]), 
       "stablehlo.DynamicUpdateSliceOp" = DynamicUpdateSliceOp([Id; 4]), // operand, update, start_indices
       "stablehlo.DynamicSliceOp"     = DynamicSliceOp([Id; 4]), // operand, start_indices, slice_sizes
       "stablehlo.ScatterOp"          = ScatterOp([Id; 5]), // input, scatter_indices, updates, dimension_numbers
+
+      // Maybe we can have a single enode with variable arity
       "blackbox_1"                   = BlackBox_1([Id; 1]), 
       "blackbox_2"                   = BlackBox_2([Id; 2]),
       "blackbox_3"                   = BlackBox_3([Id; 3]),
@@ -130,6 +135,7 @@ impl Analysis<Mdl> for TensorAnalysis {
         //     dims
         // };
 
+        // TODO: what do we need to be storing as node metadata? 
         match enode {
           Mdl::Var(_) => Self::Data { val: 0, cost: 0 }, /* we might need a name field... */
           Mdl::Int(i) => Self::Data { val: *i, cost: 0 },
