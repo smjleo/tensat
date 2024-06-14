@@ -13,7 +13,6 @@ crate-type = ["staticlib", "lib"]
 
 [dependencies]
 cxx = "1.0"
-cxx-build = "1.0"
 cxxbridge-cmd = "1.0.122"
 env_logger = { version =  "0.7", default_features = false }
 pest = "2.0"
@@ -33,6 +32,5 @@ rev = "12cc1ee7731d37fe91901c81f59678fa1d08a2bb"
 library = "c++"
 
 [build-dependencies]
-cxx = "1.0"
 cxx-build = "1.0"
 cxxbridge-cmd = "1.0.122"

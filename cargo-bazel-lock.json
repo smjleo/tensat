@@ -1,5 +1,5 @@
 {
-  "checksum": "285d2b02b163f960e708930648d9a74d9db4666c6e0ce7b61f2aa3ec9964a3b9",
+  "checksum": "f0affdde54bd26d0ec789335e5ace2fc6a52396fea0dfee7f22f794ba47b452f",
   "crates": {
     "ansi_term 0.12.1": {
       "name": "ansi_term",
@@ -1612,6 +1612,13 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -3158,10 +3165,6 @@
               "target": "cxx"
             },
             {
-              "id": "cxx-build 1.0.123",
-              "target": "cxx_build"
-            },
-            {
               "id": "egg 0.6.1-dev",
               "target": "egg"
             },
@@ -3214,10 +3217,6 @@
         ],
         "deps": {
           "common": [
-            {
-              "id": "cxx 1.0.123",
-              "target": "cxx"
-            },
             {
               "id": "cxx-build 1.0.123",
               "target": "cxx_build"

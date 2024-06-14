@@ -44,6 +44,8 @@ pub mod ffi {
 
         fn print_rec_expr(self: &CppGraphConverter);
         fn pretty_print_rec_expr(self: &CppGraphConverter, width: i32);
+
+        fn test_cost_model();
     }
 
     enum Type {
@@ -58,6 +60,12 @@ pub mod ffi {
         fn getAddOpCost(&self, lhsDims: &[i64], lhsType: Type, rhsDims: &[i64], rhsType: Type) -> u64;
         fn newCostModel() -> UniquePtr<CostModel>;
     }
+}
+
+pub fn test_cost_model() {
+    println!("Running AddOp cost function from Rust");
+    let cost_model = ffi::newCostModel();
+    println!("Cost is {}", cost_model.getAddOpCost(&[1024, 1024], ffi::Type::f32, &[1024, 1024], ffi::Type::f32));
 }
 
 /// Struct for storing information of a tensor. This is passed between functions

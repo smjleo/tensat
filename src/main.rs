@@ -21,10 +21,6 @@ use std::thread;
 use std::ffi::CString;
 
 fn main() {
-    println!("Running AddOp cost function");
-    let cost_model = tensat::input::ffi::newCostModel();
-    println!("Cost is {}", cost_model.getAddOpCost(&[1024, 1024], tensat::input::ffi::Type::f32, &[1024, 1024], tensat::input::ffi::Type::f32));
-
     // Parse arguments
     let matches = App::new("Tamago")
         .arg(
