@@ -1,10 +1,9 @@
 #include "rust/cxx.h"
 #include "cxxbridge/deps/tensat/src/input.rs.h"
 #include <utility>
-#include <bits/stdc++.h>
 
 int main() {
-    auto graphBox = new_converter();
+    auto graphBox = tensat::new_converter();
     // int dims[2] = {1024, 1024};
     int dims_1[0] = {};
     int dims_2[0] = {};
