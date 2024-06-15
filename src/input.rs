@@ -154,7 +154,7 @@ pub mod ffi {
         fn print_rec_expr(self: &CppGraphConverter);
         fn pretty_print_rec_expr(self: &CppGraphConverter, width: i32);
 
-        fn test_cost_model();
+        // fn test_cost_model(op: String) -> u64;
     }
 
     enum Type {
@@ -173,17 +173,34 @@ pub mod ffi {
             rhsDims: &[i64],
             rhsType: Type,
         ) -> u64;
+        
+        fn getMulOpCost(
+            &self,
+            lhsDims: &[i64],
+            lhsType: Type,
+            rhsDims: &[i64],
+            rhsType: Type,
+        ) -> u64;
+        
+        fn getDivOpCost(
+            &self,
+            lhsDims: &[i64],
+            lhsType: Type,
+            rhsDims: &[i64],
+            rhsType: Type,
+        ) -> u64;
+
+        fn getSubtractOpCost(
+            &self,
+            lhsDims: &[i64],
+            lhsType: Type,
+            rhsDims: &[i64],
+            rhsType: Type,
+        ) -> u64;
+
+
         fn newCostModel() -> UniquePtr<CostModel>;
     }
-}
-
-pub fn test_cost_model() {
-    println!("Running AddOp cost function from Rust");
-    let cost_model = ffi::newCostModel();
-    println!(
-        "Cost is {}",
-        cost_model.getAddOpCost(&[1024, 1024], ffi::Type::f32, &[1024, 1024], ffi::Type::f32)
-    );
 }
 
 /// Struct for storing information of a tensor. This is passed between functions
@@ -320,8 +337,12 @@ impl CppGraphConverter {
     ) -> TensorInfo {
         let comparison_direction_node = self.add_or_get_val(comparison_direction);
         let comparison_type_node = self.add_or_get_val(comparison_type);
-        let new_node =
-            Mdl::CompareOp([inpt_1.id, inpt_2.id, comparison_direction_node, comparison_type_node]);
+        let new_node = Mdl::CompareOp([
+            inpt_1.id,
+            inpt_2.id,
+            comparison_direction_node,
+            comparison_type_node,
+        ]);
         TensorInfo {
             id: self.rec_expr.add(new_node),
             shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
@@ -431,28 +452,28 @@ impl CppGraphConverter {
         ]);
 
         // This logic is incorrect
-        let mut batch_dim_sizes = start_indices.shape.clone();
-        // if index_vector_dim < batch_dim_sizes.len() as i32 {
-        //     batch_dim_sizes.remove(index_vector_dim);
+        // let mut batch_dim_sizes = start_indices.shape.clone();
+        // // if index_vector_dim < batch_dim_sizes.len() as i32 {
+        // //     batch_dim_sizes.remove(index_vector_dim);
+        // // }
+        //
+        // let mut offset_dim_sizes = slice_sizes.iter().cloned().collect::<Vec<_>>();
+        // for dim in collapsed_slice_dims
+        //     .iter()
+        //     .chain(operand_batching_dims.iter())
+        // {
+        //     offset_dim_sizes[*dim as usize] = 1;
         // }
-
-        let mut offset_dim_sizes = slice_sizes.iter().cloned().collect::<Vec<_>>();
-        for dim in collapsed_slice_dims
-            .iter()
-            .chain(operand_batching_dims.iter())
-        {
-            offset_dim_sizes[*dim as usize] = 1;
-        }
-
-        let mut shape = Vec::new();
-        shape.extend(batch_dim_sizes);
-        shape.extend(offset_dim_sizes);
-        let (shape, n_dim) = self.shape_from_dim(dims);
+        //
+        // let mut shape = Vec::new();
+        // shape.extend(batch_dim_sizes);
+        // shape.extend(offset_dim_sizes);
+        // let (shape, n_dim) = self.shape_from_dim(*(batch_dim_sizes as [i32]));
 
         TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape,
-            n_dim: shape.len(),
+            shape: inpt.shape,
+            n_dim: inpt.n_dim,
         }
     }
     // pub fn concatenate_op(&mut self, inputs: &[TensorInfo], dimension: i32, cost: i32) -> TensorInfo {

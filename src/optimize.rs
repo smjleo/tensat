@@ -1,9 +1,9 @@
-use crate::{model::*, rewrites::*};
+use crate::{input::ffi, model::*, rewrites::*};
 use egg::*;
+// use cxx::UniquePtr;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::convert::TryInto;
 use std::time::{Duration, Instant};
 
 /// Wrapper class for egg's cost function
@@ -23,10 +23,16 @@ impl CostFunction<Mdl> for TensorCost<'_> {
 }
 
 /// Class for our cost model
-#[derive(Default)]
-pub struct CostModel {}
+pub struct CostModel {
+    cpp_cost_model: cxx::UniquePtr<ffi::CostModel>, // Holding the C++ cost model
+}
 
 impl CostModel {
+    pub fn new() -> Self {
+        Self {
+            cpp_cost_model: ffi::newCostModel(),
+        }
+    }
 
     /// Gets cost for the enode itself.
     ///
@@ -47,34 +53,61 @@ impl CostModel {
         let x = |i: &Id| &egraph[*i].data;
         match enode {
             Mdl::Int(_) | Mdl::Var(_) | Mdl::Input(_) => 0.0,
-            Mdl::BlackBox_1(_) | Mdl::BlackBox_2(_) | Mdl::BlackBox_3(_) | Mdl::BlackBox_4(_) | Mdl::BlackBox_5(_) => 0.0,
-            Mdl::CompareOp([input1, input2, comparison_direction, comparison_type]) => x(cost).val as f32,
-            Mdl::BroadcastInDimOp([input, broadcast_dimension]) => x(cost).val as f32,
-            Mdl::ConvertOp([input, output_type]) => x(cost).val as f32,
-            Mdl::ReduceOp([input, init_values]) => x(cost).val as f32,
-            Mdl::ReshapeOp([input, shape]) => x(cost).val as f32,
-            Mdl::GatherOp([input, start_indices, offset_dims, collapsed_slice_dims, operand_batching_dims, start_indices_batching_dims, start_index_map, index_vector_dim, slice_sizes, indices_are_sorted]) => x(cost).val as f32,
-            Mdl::SelectOp([pred, on_true, on_false]) => x(cost).val as f32,
-            Mdl::DotGeneralOp([lhs, rhs, lhs_batch_dim, rhs_batch_dim, lhs_contract_dim, rhs_contract_dim, precision_config]) => x(cost).val as f32,
-            Mdl::PadOp([input, padding_value, edge_padding_low, edge_padding_high, interior_padding]) => x(cost).val as f32,
-            Mdl::SliceOp([input, start_indices, limit_indices, strides]) => x(cost).val as f32,
-            Mdl::TransposeOp([input, permutation]) => x(cost).val as f32,
-            Mdl::MulOp([lhs, rhs]) => x(cost).val as f32,
-            Mdl::AddOp([lhs, rhs]) => x(cost).val as f32,
-            Mdl::DivOp([lhs, rhs]) => x(cost).val as f32,
-            Mdl::SubtractOp([lhs, rhs]) => x(cost).val as f32,
-            Mdl::MinOp([lhs, rhs]) => x(cost).val as f32,
-            Mdl::MaxOp([lhs, rhs]) => x(cost).val as f32,
-            Mdl::NegOp([input]) => x(cost).val as f32,
-            Mdl::TanhOp([input]) => x(cost).val as f32,
-            Mdl::ExpOp([input]) => x(cost).val as f32,
-            Mdl::IotaOp([iota_dimension, shape]) => x(cost).val as f32,
-            Mdl::ConstantOp([]) => x(cost).val as f32,
-            Mdl::DynamicUpdateSliceOp([operand, update, start_indices]) => x(cost).val as f32,
-            Mdl::DynamicSliceOp([operand, start_indices, slice_sizes]) => x(cost).val as f32,
-            Mdl::ScatterOp([input, scatter_indices, updates, dimension_numbers]) => x(cost).val as f32
+            Mdl::BlackBox_1(_)
+            | Mdl::BlackBox_2(_)
+            | Mdl::BlackBox_3(_)
+            | Mdl::BlackBox_4(_)
+            | Mdl::BlackBox_5(_) => 0.0,
+            Mdl::CompareOp([input1, input2, comparison_direction, comparison_type]) => 0.0,
+            Mdl::BroadcastInDimOp([input, broadcast_dimension]) => 0.0,
+            Mdl::ConvertOp([input, output_type]) => 0.0,
+            Mdl::ReduceOp([input, init_values]) => 0.0,
+            Mdl::ReshapeOp([input, shape]) => 0.0,
+            Mdl::GatherOp(
+                [input, start_indices, offset_dims, collapsed_slice_dims, operand_batching_dims, start_indices_batching_dims, start_index_map, index_vector_dim, slice_sizes, indices_are_sorted],
+            ) => 0.0,
+            Mdl::SelectOp([pred, on_true, on_false]) => 0.0,
+            Mdl::DotGeneralOp(
+                [lhs, rhs, lhs_batch_dim, rhs_batch_dim, lhs_contract_dim, rhs_contract_dim, precision_config],
+            ) => 0.0,
+            Mdl::PadOp(
+                [input, padding_value, edge_padding_low, edge_padding_high, interior_padding],
+            ) => 0.0,
+            Mdl::SliceOp([input, start_indices, limit_indices, strides]) => 0.0,
+            Mdl::TransposeOp([input, permutation]) => 0.0,
+            Mdl::MulOp([lhs, rhs]) => {
+                let lhs_dims = [1024, 1024]; // Example dimensions
+                let rhs_dims = [1024, 1024];
+                self.cpp_cost_model.getMulOpCost(&lhs_dims, ffi::Type::f32, &rhs_dims, ffi::Type::f32) as f32
+            },
+            Mdl::AddOp([lhs, rhs]) => {
+                let lhs_dims = [1024, 1024]; // Example dimensions
+                let rhs_dims = [1024, 1024];
+                self.cpp_cost_model.getAddOpCost(&lhs_dims, ffi::Type::f32, &rhs_dims, ffi::Type::f32) as f32
+            },
+            Mdl::DivOp([lhs, rhs]) => {
+                let lhs_dims = [1024, 1024]; // Example dimensions
+                let rhs_dims = [1024, 1024];
+                self.cpp_cost_model.getDivOpCost(&lhs_dims, ffi::Type::f32, &rhs_dims, ffi::Type::f32) as f32
+            },
+            Mdl::SubtractOp([lhs, rhs]) => {
+                let lhs_dims = [1024, 1024]; // Example dimensions
+                let rhs_dims = [1024, 1024];
+                self.cpp_cost_model.getSubtractOpCost(&lhs_dims, ffi::Type::f32, &rhs_dims, ffi::Type::f32) as f32
+            },
+            Mdl::MinOp([lhs, rhs]) => 0.0,
+            Mdl::MaxOp([lhs, rhs]) => 0.0,
+            Mdl::NegOp([input]) => 0.0,
+            Mdl::TanhOp([input]) => 0.0,
+            Mdl::ExpOp([input]) => 0.0,
+            Mdl::IotaOp([iota_dimension, shape]) => 0.0,
+            Mdl::ConstantOp([]) => 0.0,
+            Mdl::DynamicUpdateSliceOp([operand, update, start_indices]) => 0.0,
+            Mdl::DynamicSliceOp([operand, start_indices, slice_sizes]) => 0.0,
+            Mdl::ScatterOp([input, scatter_indices, updates, dimension_numbers]) => 0.0,
+            _ => 0.0,
         }
-    }  
+    }
 }
 
 /// Prepare the data for formulation ILP
