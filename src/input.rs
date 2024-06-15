@@ -151,6 +151,7 @@ pub mod ffi {
             dimension_numbers: i32,
         ) -> Box<TensorInfo>;
 
+        fn optimize(self: &CppGraphConverter);
         fn print_rec_expr(self: &CppGraphConverter);
         fn pretty_print_rec_expr(self: &CppGraphConverter, width: i32);
 
@@ -173,7 +174,7 @@ pub mod ffi {
             rhsDims: &[i64],
             rhsType: Type,
         ) -> u64;
-        
+
         fn getMulOpCost(
             &self,
             lhsDims: &[i64],
@@ -181,7 +182,7 @@ pub mod ffi {
             rhsDims: &[i64],
             rhsType: Type,
         ) -> u64;
-        
+
         fn getDivOpCost(
             &self,
             lhsDims: &[i64],
@@ -197,7 +198,6 @@ pub mod ffi {
             rhsDims: &[i64],
             rhsType: Type,
         ) -> u64;
-
 
         fn newCostModel() -> UniquePtr<CostModel>;
     }
@@ -1025,6 +1025,92 @@ impl CppGraphConverter {
     pub fn pretty_print_rec_expr(&self, width: i32) {
         println!("{}", self.rec_expr.pretty(width as usize))
     }
+
+    pub fn optimize(&self) {
+        let start = &self.rec_expr;
+
+        // Configuration
+        let n_sec = 10; // seconds for timeout
+        let use_multi = false; // whether to use multi patterns
+        let no_cycle = false; // is our graph by definition acyclic?
+        let filter_after = false; // vanilla filtering or efficient filtering
+        let rule_file = "../multi_rules.txt";
+        let learned_rules =
+            read_to_string(rule_file).expect("Something went wrong reading the rule file");
+        let pre_defined_rules = PRE_DEFINED_RULES.iter().map(|&x| x);
+        let split_rules: Vec<&str> = learned_rules.split("\n").chain(pre_defined_rules).collect();
+        let do_filter_after = no_cycle && filter_after;
+        let rules = rules_from_str(split_rules, do_filter_after);
+
+        let iter_multi = 2;
+        let node_multi = 30000;
+        let multi_rules: Vec<(&str, bool)> = PRE_DEFINED_MULTI
+            .iter()
+            .map(|&x| (x, /*symmetric=*/ false))
+            .collect();
+        let mut multi_patterns = MultiPatterns::with_rules(
+            multi_rules,
+            no_cycle,
+            iter_multi,
+            filter_after,
+            node_multi,
+            n_sec,
+        );
+
+        let time_limit_sec = Duration::new(n_sec, 0);
+        let iter_limit = 10000;
+        let node_limit = 50000;
+        let runner = Runner::<Mdl, TensorAnalysis, ()>::default()
+            .with_node_limit(node_limit)
+            .with_time_limit(time_limit_sec)
+            .with_iter_limit(iter_limit)
+            .with_expr(&start)
+            .with_hook(move |runner| multi_patterns.run_one(runner));
+        let start_time = Instant::now();
+        let mut runner = runner.run(&rules[..]);
+        if do_filter_after {
+            // Do cycle removal after the final iteration
+            remove_cycle_by_order(&mut runner);
+        }
+        let sat_duration = start_time.elapsed();
+        let num_iter_sat = runner.iterations.len() - 1;
+
+        println!("Runner complete!");
+        println!("  Nodes: {}", runner.egraph.total_size());
+        println!("  Classes: {}", runner.egraph.number_of_classes());
+        println!("  Stopped: {:?}", runner.stop_reason.unwrap());
+        println!("  Time taken: {:?}", sat_duration);
+        println!("  Number of iterations: {:?}", num_iter_sat);
+
+        let (num_enodes, num_classes, avg_nodes_per_class, num_edges, num_programs) =
+            get_stats(&runner.egraph);
+        println!("  Average nodes per class: {}", avg_nodes_per_class);
+        println!("  Number of edges: {}", num_edges);
+        println!("  Number of programs: {}", num_programs);
+
+        let (egraph, root) = (runner.egraph, runner.roots[0]);
+        let (best, ext_secs) = extract_by_ilp(&egraph, root, &matches, &cost_model);
+    }
+}
+
+// this is copied from main.rs
+fn get_stats(egraph: &EGraph<Mdl, TensorAnalysis>) -> (usize, usize, f32, usize, f32) {
+    let num_enodes = egraph.total_size();
+    let num_classes = egraph.number_of_classes();
+    let avg_nodes_per_class = num_enodes as f32 / (num_classes as f32);
+    let num_edges = egraph
+        .classes()
+        .fold(0, |acc, c| c.iter().fold(0, |sum, n| n.len() + sum) + acc);
+    let num_programs = egraph
+        .classes()
+        .fold(0.0, |acc, c| acc + (c.len() as f32).log2());
+    (
+        num_enodes,
+        num_classes,
+        avg_nodes_per_class,
+        num_edges,
+        num_programs,
+    )
 }
 
 /// Struct for generating new names for weight tensors in the model
