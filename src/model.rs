@@ -30,37 +30,39 @@ define_language! {
       "input"                        = Input([Id; 1]),  // takes a Var, format: name@dim1_dim2...
       "stablehlo.CompareOp"          = CompareOp([Id; 4]), // input1, input2, comparison_direction,
                                                            // comparsion_type
-      "stablehlo.BroadcastInDimOp"   = BroadcastInDimOp([Id; 3]), // input, broadcast_dimensions
+      "stablehlo.BroadcastInDimOp"   = BroadcastInDimOp([Id; 2]), // input, broadcast_dimensions
       // TODO: we might need the input type as well.
       "stablehlo.ConvertOp"          = ConvertOp([Id; 2]), // input, output_tyoe.
       // TODO: we probably won't have any rewrites for reduces. Maybe function pointers for the
       // body
-      "stablehlo.ReduceOp"           = ReduceOp([Id; 3]), // input, init_values, dimensions, body
-      "stablehlo.ReshapeOp"          = ReshapeOp([Id; 3]), // input, shape
+      "stablehlo.ReduceOp"           = ReduceOp([Id; 2]), // input, init_values, dimensions, body
+      "stablehlo.ReshapeOp"          = ReshapeOp([Id; 2]), // input, shape
       "stablehlo.GatherOp"           = GatherOp([Id; 10]), 
       "stablehlo.SelectOp"           = SelectOp([Id; 3]), // pred, on_true, on_false
       "stablehlo.ConcatenateOp"      = ConcatenateOp([Id; 2]), // inputs, dimension
-      "stablehlo.DotGeneralOp"       = DotGeneralOp([Id; 8]), // lhs, rhs... 
+      "stablehlo.DotGeneralOp"       = DotGeneralOp([Id; 7]), // lhs, rhs... 
       "stablehlo.PadOp"              = PadOp([Id; 5]), // input, padding_value, edge_padding_low,
                                                        // edge_padding_high, interior_padding
       "stablehlo.SliceOp"            = SliceOp([Id; 4]), // input, start_indices, limit_indices, strides
-      "stablehlo.TransposeOp"        = TransposeOp([Id; 3]), // input, permutation
+      "stablehlo.TransposeOp"        = TransposeOp([Id; 2]), // input, permutation
       // BINARY OPS
-      "stablehlo.MulOp"              = MulOp([Id; 3]), 
-      "stablehlo.AddOp"              = AddOp([Id; 3]),
-      "stablehlo.DivOp"              = DivOp([Id; 3]),
-      "stablehlo.SubtractOp"         = SubtractOp([Id; 3]),
-      "stablehlo.MinOp"              = MinOp([Id; 3]),
-      "stablehlo.MaxOp"              = MaxOp([Id; 3]),
+      "stablehlo.MulOp"              = MulOp([Id; 2]), 
+      "stablehlo.AddOp"              = AddOp([Id; 2]),
+      "stablehlo.DivOp"              = DivOp([Id; 2]),
+      "stablehlo.SubtractOp"         = SubtractOp([Id; 2]),
+      "stablehlo.MinOp"              = MinOp([Id; 2]),
+      "stablehlo.MaxOp"              = MaxOp([Id; 2]),
       // UNARY OPS
-      "stablehlo.NegOp"              = NegOp([Id; 2]), // input
-      "stablehlo.TanhOp"             = TanhOp([Id; 2]), // input
-      "stablehlo.ExpOp"              = ExpOp([Id; 2]), // input
-      "stablehlo.IotaOp"             = IotaOp([Id; 3]), // iota_dimension, output_shape
+      "stablehlo.NegOp"              = NegOp([Id; 1]), // input
+      "stablehlo.TanhOp"             = TanhOp([Id; 1]), // input
+      "stablehlo.ExpOp"              = ExpOp([Id; 1]), // input
+      // MISC OPS
+      "stablehlo.IotaOp"             = IotaOp([Id; 2]), // iota_dimension, output_shape
       "stablehlo.ConstantOp"         = ConstantOp([Id; 0]), 
-      "stablehlo.DynamicUpdateSliceOp" = DynamicUpdateSliceOp([Id; 4]), // operand, update, start_indices
-      "stablehlo.DynamicSliceOp"     = DynamicSliceOp([Id; 4]), // operand, start_indices, slice_sizes
-      "stablehlo.ScatterOp"          = ScatterOp([Id; 5]), // input, scatter_indices, updates, dimension_numbers
+      "stablehlo.DynamicUpdateSliceOp" = DynamicUpdateSliceOp([Id; 3]), // operand, update, start_indices
+      "stablehlo.DynamicSliceOp"     = DynamicSliceOp([Id; 3]), // operand, start_indices, slice_sizes
+      // Complete pain, has arity 12
+      "stablehlo.ScatterOp"          = ScatterOp([Id; 4]), // input, scatter_indices, updates, dimension_numbers
 
       // Maybe we can have a single enode with variable arity
       "blackbox_1"                   = BlackBox_1([Id; 1]), 
