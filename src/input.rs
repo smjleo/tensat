@@ -1,7 +1,14 @@
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::process::{Command, Stdio};
 use crate::model::*;
+use crate::optimize::*;
+use crate::rewrites::*;
 use cxx::CxxVector;
 use egg::*;
 use itertools::Itertools;
+use std::fs::*;
+use std::time::*;
 use std::{borrow::Borrow, collections::HashMap};
 
 const MAX_DIM: usize = 8;
@@ -1089,7 +1096,86 @@ impl CppGraphConverter {
         println!("  Number of programs: {}", num_programs);
 
         let (egraph, root) = (runner.egraph, runner.roots[0]);
-        let (best, ext_secs) = extract_by_ilp(&egraph, root, &matches, &cost_model);
+        let cost_model = CostModel::new();
+        let (best, ext_secs) = extract_by_ilp(&egraph, root, &cost_model);
+    }
+}
+
+fn extract_by_ilp(
+    egraph: &EGraph<Mdl, TensorAnalysis>,
+    root: Id,
+    cost_model: &CostModel,
+) -> (RecExpr<Mdl>, f32) {
+    // Prepare data for ILP formulation, save to json
+    let (m_id_map, e_m, h_i, cost_i, g_i, root_m, i_to_nodes, blacklist_i) =
+        prep_ilp_data(egraph, root, cost_model);
+
+    let data = json!({
+        "e_m": e_m,
+        "h_i": h_i,
+        "cost_i": cost_i,
+        "g_i": g_i,
+        "root_m": root_m,
+        "blacklist_i": blacklist_i,
+    });
+    let data_str = serde_json::to_string(&data).expect("Fail to convert json to string");
+    create_dir_all("./tmp");
+    write("./tmp/ilp_data.json", data_str).expect("Unable to write file");
+
+    // Call python script to run ILP
+    let order_var_int = false;
+    let class_constraint = false;
+    let no_order = true;
+    let mut arg_vec = vec!["extractor/extract.py"];
+    if order_var_int {
+        arg_vec.push("--order_var_int");
+    }
+    if class_constraint {
+        arg_vec.push("--eclass_constraint");
+    }
+    if no_order {
+        arg_vec.push("--no_order");
+    }
+    let time_lim = "1000";
+    let num_thread = "1";
+    arg_vec.push("--time_lim_sec");
+    arg_vec.push(time_lim);
+    arg_vec.push("--num_thread");
+    arg_vec.push(num_thread);
+    let child = Command::new("python")
+        .args(&arg_vec)
+        .spawn()
+        .expect("failed to execute child");
+    let output = child.wait_with_output().expect("failed to get output");
+
+    if output.status.success() {
+        // Read back solved results, construct optimized graph
+        let solved_str = read_to_string("./tmp/solved.json")
+            .expect("Something went wrong reading the solved file");
+        let solved_data: SolvedResults =
+            serde_json::from_str(&solved_str).expect("JSON was not well-formatted");
+
+        let mut node_picked: HashMap<Id, Mdl> = HashMap::new();
+        for (i, x_i) in solved_data.solved_x.iter().enumerate() {
+            if *x_i == 1 {
+                let eclass_id = m_id_map[g_i[i]];
+                if node_picked.contains_key(&eclass_id) {
+                    println!("Duplicate node in eclass");
+                    println!("{}", node_picked.get(&eclass_id).unwrap().display_op());
+                    println!("{}", i_to_nodes[i].display_op());
+                    continue;
+                }
+                //assert!(!node_picked.contains_key(&eclass_id));
+                node_picked.insert(eclass_id, i_to_nodes[i].clone());
+            }
+        }
+
+        let mut expr = RecExpr::default();
+        let mut added_memo: HashMap<Id, Id> = Default::default();
+        let _ = construct_best_rec(&node_picked, root, &mut added_memo, egraph, &mut expr);
+        (expr, solved_data.time)
+    } else {
+        panic!("Python script failed");
     }
 }
 
