@@ -52,7 +52,7 @@ impl CostModel {
     pub fn get_self_cost(&self, egraph: &EGraph<Mdl, TensorAnalysis>, enode: &Mdl) -> f32 {
         let x = |i: &Id| &egraph[*i].data;
         match enode {
-            Mdl::Int(_) | Mdl::Var(_) | Mdl::Input(_) => 0.0,
+            Mdl::Num(_) | Mdl::Var(_) | Mdl::Input(_) => 0.0,
             Mdl::BlackBox_1(_)
             | Mdl::BlackBox_2(_)
             | Mdl::BlackBox_3(_)

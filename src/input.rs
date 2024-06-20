@@ -1,13 +1,13 @@
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::process::{Command, Stdio};
 use crate::model::*;
 use crate::optimize::*;
 use crate::rewrites::*;
 use cxx::CxxVector;
 use egg::*;
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::fs::*;
+use std::process::{Command, Stdio};
 use std::time::*;
 use std::{borrow::Borrow, collections::HashMap};
 
@@ -17,6 +17,7 @@ const MAX_DIM: usize = 8;
 pub mod ffi {
     // take floats from c++ and wrap them into f32s below
     extern "Rust" {
+        type Mdl;
         type CppGraphConverter;
         type TensorInfo;
         fn new_converter() -> Box<CppGraphConverter>;
@@ -161,7 +162,8 @@ pub mod ffi {
         fn optimize(self: &CppGraphConverter);
         fn print_rec_expr(self: &CppGraphConverter);
         fn pretty_print_rec_expr(self: &CppGraphConverter, width: i32);
-
+        fn get_rec_expr_as_ref(self: &CppGraphConverter) -> &[Mdl];
+        fn dfs_convert(root: &Mdl, rec_expr: &[Mdl]) -> Vec<i32>;
         // fn test_cost_model(op: String) -> u64;
     }
 
@@ -205,19 +207,18 @@ pub mod ffi {
             rhsDims: &[i64],
             rhsType: Type,
         ) -> u64;
-
         fn newCostModel() -> UniquePtr<CostModel>;
     }
 }
 
-/// Struct for storing information of a tensor. This is passed between functions
-/// during graph creation.
+// Struct for storing information of a tensor. This is passed between functions
+// during graph creation.
 #[derive(Copy, Clone, Default)]
 pub struct TensorInfo {
     /// Id into the RecExpr constructed
     pub id: Id,
     /// Shape of the tensor. We deal with tensor up to MAX_DIM dimensions
-    pub shape: [i32; 8],
+    pub shape: [i32; MAX_DIM],
     /// Number of dimensions of this tensor
     pub n_dim: usize,
 }
@@ -225,7 +226,7 @@ pub struct TensorInfo {
 /// Struct for converting a model specified using our Rust interface to RecExpr
 ///
 /// The RecExpr is growed on the fly when member functions are called. Uses a
-/// Hashmap to store the map of scalar nodes to their indices into the RexExpr to
+/// Hashmap to store the map of scalar nodes to their indices into the RecExpr to
 /// avoid replication.
 #[derive(Default)]
 pub struct CppGraphConverter {
@@ -806,7 +807,7 @@ impl CppGraphConverter {
         match self.scalar_map.get(&val) {
             Some(id) => *id,
             None => {
-                let node = Mdl::Int(val);
+                let node = Mdl::Num(val);
                 let id = self.rec_expr.add(node);
                 self.scalar_map.insert(val, id);
                 id
@@ -1033,6 +1034,10 @@ impl CppGraphConverter {
         println!("{}", self.rec_expr.pretty(width as usize))
     }
 
+    pub fn get_rec_expr_as_ref(&self) -> &[Mdl] {
+        return &self.rec_expr.as_ref();
+    }
+
     pub fn optimize(&self) {
         let start = &self.rec_expr;
 
@@ -1041,7 +1046,8 @@ impl CppGraphConverter {
         let use_multi = false; // whether to use multi patterns
         let no_cycle = false; // is our graph by definition acyclic?
         let filter_after = false; // vanilla filtering or efficient filtering
-        let rule_file = "../multi_rules.txt";
+        let rule_file =
+            "/Users/vohraary/enz/Enzyme-JAX/src/enzyme_ad/jax/deps/tensat/converted.txt";
         let learned_rules =
             read_to_string(rule_file).expect("Something went wrong reading the rule file");
         let pre_defined_rules = PRE_DEFINED_RULES.iter().map(|&x| x);
@@ -1098,6 +1104,61 @@ impl CppGraphConverter {
         let (egraph, root) = (runner.egraph, runner.roots[0]);
         let cost_model = CostModel::new();
         let (best, ext_secs) = extract_by_ilp(&egraph, root, &cost_model);
+        println!("{}", best);
+    }
+}
+
+fn dfs_convert(root: &Mdl, rec_expr: &[Mdl]) -> Vec<i32> {
+    match root {
+        Mdl::Var(label) => {
+            let label_str = label.as_str();
+            let mut res = if let Some(start_idx) = label_str.find("input_") {
+                // This is an input variable. Note that this also has a shape
+                // TODO: we need to make the input numbers correspond with the llvm::BlockArgument
+                // identifier numbers
+                let start = start_idx + 6; // Skip the "input_" part
+                if let Some(end_idx) = label_str[start..].find('@') {
+                    let end = start + end_idx;
+                    let integer_str = &label_str[start..end];
+                    vec![integer_str.parse().unwrap()]
+                } else {
+                    // Couldn't find '@' after "input_", handle this case
+                    vec![]
+                }
+            } else {
+                // This is a shape
+                label_str
+                    .split('_')
+                    .map(|s| s.parse::<i32>().unwrap())
+                    .collect()
+            };
+            res.push(1); // hacky enum
+            res
+        }
+        Mdl::Input([id]) => {
+            // This is the Id of a Var
+            let size: usize = (*id).into();
+            let mut res = dfs_convert(&rec_expr[size], rec_expr);
+            res.push(2); // hacky enum
+            res
+        }
+        // Mdl::ConstantOp([]) => 0.0,
+        // Mdl::ReshapeOp([input, shape]) => 0.0,
+        // Mdl::DotGeneralOp(
+        //     [lhs, rhs, lhs_batch_dim, rhs_batch_dim, lhs_contract_dim, rhs_contract_dim, precision_config],
+        // ) => 0.0,
+        // Mdl::TransposeOp([input, permutation]) => 0.0,
+        // Mdl::MulOp([lhs, rhs]) =>
+        // Mdl::AddOp([lhs, rhs]) =>
+        // Mdl::DivOp([lhs, rhs]) =>
+        // Mdl::SubtractOp([lhs, rhs]) =>
+        // Mdl::MinOp([lhs, rhs]) => 0.0,
+        // Mdl::MaxOp([lhs, rhs]) => 0.0,
+        // Mdl::NegOp([input]) => 0.0,
+        // Mdl::TanhOp([input]) => 0.0,
+        // Mdl::ExpOp([input]) => 0.0,
+        // Mdl::IotaOp([iota_dimension, shape]) => 0.0,
+        _ => vec![0],
     }
 }
 
