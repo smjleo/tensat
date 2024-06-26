@@ -1089,7 +1089,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn optimize(&self) -> Vec<ffi::Node>{
+    pub fn optimize(&self) -> Vec<ffi::Node> {
         let start = &self.rec_expr;
 
         // Configuration
@@ -1097,8 +1097,12 @@ impl CppGraphConverter {
         let use_multi = false; // whether to use multi patterns
         let no_cycle = false; // is our graph by definition acyclic?
         let filter_after = false; // vanilla filtering or efficient filtering
+
+        let path = std::env::current_dir().unwrap();
+        println!("The current directory is {}", path.display());
         let rule_file =
-            "/Users/vohraary/enz/Enzyme-JAX/src/enzyme_ad/jax/deps/tensat/converted.txt";
+            "src/enzyme_ad/jax/deps/tensat/converted.txt";
+            
         let learned_rules =
             read_to_string(rule_file).expect("Something went wrong reading the rule file");
         let pre_defined_rules = PRE_DEFINED_RULES.iter().map(|&x| x);
