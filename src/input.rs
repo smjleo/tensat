@@ -15,6 +15,16 @@ const MAX_DIM: usize = 8;
 
 #[cxx::bridge(namespace = "tensat")]
 pub mod ffi {
+    enum Type {
+        i32,
+        f32,
+    }
+
+    struct Node {
+        name: String,
+        operands: Vec<usize>,
+    }
+
     // take floats from c++ and wrap them into f32s below
     extern "Rust" {
         type Mdl;
@@ -159,17 +169,12 @@ pub mod ffi {
             dimension_numbers: i32,
         ) -> Box<TensorInfo>;
 
-        fn optimize(self: &CppGraphConverter);
+        fn optimize(self: &CppGraphConverter) -> Vec<Node>;
         fn print_rec_expr(self: &CppGraphConverter);
         fn pretty_print_rec_expr(self: &CppGraphConverter, width: i32);
-        fn get_rec_expr_as_ref(self: &CppGraphConverter) -> &[Mdl];
-        fn dfs_convert(root: &Mdl, rec_expr: &[Mdl]) -> Vec<i32>;
+        // fn get_rec_expr_as_ref(self: &CppGraphConverter) -> &[Mdl];
+        // fn dfs_convert(root: &Mdl, rec_expr: &[Mdl]) -> Vec<i32>;
         // fn test_cost_model(op: String) -> u64;
-    }
-
-    enum Type {
-        i32,
-        f32,
     }
 
     unsafe extern "C++" {
@@ -1038,7 +1043,53 @@ impl CppGraphConverter {
         return &self.rec_expr.as_ref();
     }
 
-    pub fn optimize(&self) {
+    fn convert_to_node(&self) -> Vec<ffi::Node> {
+        let mut res: Vec<ffi::Node> = Vec::new();
+
+        let index = |id: Id| usize::from(id);  // TODO: this is probably wrong
+        let convert = |operands: &[Id]| operands.iter().map(|id: &Id| index(*id)).collect::<Vec<usize>>();
+        let new_node = |name: &str, operands: &[Id]| 
+            ffi::Node { 
+                name: name.to_string(), 
+                operands: convert(operands),
+            };
+        
+        let rec_expr_ref = self.get_rec_expr_as_ref();
+
+        for mdl in rec_expr_ref.iter() {
+            let node = match mdl {
+                Mdl::Var(label) => {
+                    ffi::Node {
+                        name: label.to_string(),
+                        operands: vec![]
+                    }
+                }
+                // TODO: More clever pattern matching
+                Mdl::Input(ops) => new_node("Input", ops),
+                Mdl::ConstantOp(ops) => new_node("ConstantOp", ops),
+                Mdl::ReshapeOp(ops) => new_node("ReshapeOp", ops),
+                Mdl::DotGeneralOp(ops) => new_node("DotGeneralOp", ops),
+                Mdl::TransposeOp(ops) => new_node("TransposeOp", ops),
+                Mdl::MulOp(ops) => new_node("MulOp", ops),
+                Mdl::AddOp(ops) => new_node("AddOp", ops),
+                Mdl::DivOp(ops) => new_node("DivOp", ops),
+                Mdl::SubtractOp(ops) => new_node("SubtractOp", ops),
+                Mdl::MinOp(ops) => new_node("MinOp", ops),
+                Mdl::MaxOp(ops) => new_node("MaxOp", ops),
+                Mdl::NegOp(ops) => new_node("NegOp", ops),
+                Mdl::TanhOp(ops) => new_node("TanhOp", ops),
+                Mdl::ExpOp(ops) => new_node("ExpOp", ops),
+                Mdl::IotaOp(ops) => new_node("IotaOp", ops),
+                _ => unimplemented!()
+            };   
+
+            res.push(node);
+        }
+        
+        res
+    }
+
+    pub fn optimize(&self) -> Vec<ffi::Node>{
         let start = &self.rec_expr;
 
         // Configuration
@@ -1105,9 +1156,12 @@ impl CppGraphConverter {
         let cost_model = CostModel::new();
         let (best, ext_secs) = extract_by_ilp(&egraph, root, &cost_model);
         println!("{}", best);
+
+        self.convert_to_node()
     }
 }
 
+/* 
 fn dfs_convert(root: &Mdl, rec_expr: &[Mdl]) -> Vec<i32> {
     match root {
         Mdl::Var(label) => {
@@ -1161,6 +1215,8 @@ fn dfs_convert(root: &Mdl, rec_expr: &[Mdl]) -> Vec<i32> {
         _ => vec![0],
     }
 }
+
+*/
 
 fn extract_by_ilp(
     egraph: &EGraph<Mdl, TensorAnalysis>,
