@@ -137,9 +137,18 @@ impl Analysis<Mdl> for TensorAnalysis {
         // };
 
         // TODO: what do we need to be storing as node metadata?
+
         match enode {
             Mdl::Var(_) => Self::Data { val: 0, cost: 0 }, /* we might need a name field... */
             Mdl::Num(i) => Self::Data { val: *i, cost: 0 },
+            
+            // TODO: Here for testing. Remove later and call cost function with appropriate arguments
+            Mdl::Input([node]) => Self::Data { val: 0, cost: 0 },
+            Mdl::MulOp([lhs, rhs]) => Self::Data { val: 0, cost: 10 },
+            Mdl::AddOp([lhs, rhs]) => Self::Data { val: 0, cost: 10 },
+            Mdl::DivOp([lhs, rhs]) => Self::Data { val: 0, cost: 10 },
+            Mdl::SubtractOp([lhs, rhs]) => Self::Data { val: 0, cost: 10 },
+
             // Mdl::CompareOp([input1, input2, comparison, cost]) => Self::Data { val: 0, cost: x(cost).val },
             // Mdl::BroadcastInDimOp([input, dimensions, cost]) => Self::Data { val: 0, cost: x(cost).val },
             // Mdl::ConvertOp([input, cost]) => Self::Data { val: 0, cost: x(cost).val },

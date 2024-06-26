@@ -121,19 +121,23 @@ pub fn rules_from_str(rs: Vec<&str>, filter_after: bool) -> Vec<Rewrite<Mdl, Ten
 /// Hand specified normal rules from TASO
 #[rustfmt::skip]
 pub static PRE_DEFINED_RULES: &[&str] = &[
+    /*
     "(conv2d 1 1 0 0 ?input_1 ?input_2)=>(conv2d 1 1 0 0 ?input_1 (merge ?input_2 2))",
     "(conv2d 1 1 0 2 ?input_1 ?input_2)=>(conv2d 1 1 0 2 ?input_1 (merge ?input_2 2))",
     "(conv2d 2 2 0 0 ?input_1 ?input_2)=>(conv2d 2 2 0 0 ?input_1 (merge ?input_2 2))",
     "(conv2d 2 2 0 2 ?input_1 ?input_2)=>(conv2d 2 2 0 2 ?input_1 (merge ?input_2 2))",
+    */
 ];
 
 /// Hand specified multi-pattern rules from TASO
 #[rustfmt::skip]
 pub static PRE_DEFINED_MULTI: &[&str] = &[
+    /* 
     "(conv2d 1 1 0 0 ?input_1 ?input_2)=>(split_0 (split 1 (conv2d 1 1 0 0 ?input_1 (concat 0 4 (enlarge ?input_2 ?input_3) ?input_3))))",
     "(conv2d 1 1 0 0 ?input_1 ?input_3)=>(split_1 (split 1 (conv2d 1 1 0 0 ?input_1 (concat 0 4 (enlarge ?input_2 ?input_3) ?input_3))))",
     "(conv2d 1 1 0 2 ?input_1 ?input_2)=>(split_0 (split 1 (conv2d 1 1 0 2 ?input_1 (concat 0 4 (enlarge ?input_2 ?input_3) ?input_3))))",
     "(conv2d 1 1 0 2 ?input_1 ?input_3)=>(split_1 (split 1 (conv2d 1 1 0 2 ?input_1 (concat 0 4 (enlarge ?input_2 ?input_3) ?input_3))))",
+    */
 ];
 
 /// Struct for passing results in the recursive function check_pat

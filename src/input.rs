@@ -1102,7 +1102,7 @@ impl CppGraphConverter {
         println!("The current directory is {}", path.display());
         let rule_file =
             "src/enzyme_ad/jax/deps/tensat/converted.txt";
-            
+
         let learned_rules =
             read_to_string(rule_file).expect("Something went wrong reading the rule file");
         let pre_defined_rules = PRE_DEFINED_RULES.iter().map(|&x| x);
@@ -1247,7 +1247,7 @@ fn extract_by_ilp(
     let order_var_int = false;
     let class_constraint = false;
     let no_order = true;
-    let mut arg_vec = vec!["extractor/extract.py"];
+    let mut arg_vec = vec!["src/enzyme_ad/jax/deps/tensat/extractor/extract.py"];
     if order_var_int {
         arg_vec.push("--order_var_int");
     }
