@@ -1,4 +1,4 @@
-use crate::{input::ffi, model::*, rewrites::*};
+use crate::{input::ffi, input::TensorInfo, model::*, rewrites::*};
 use egg::*;
 // use cxx::UniquePtr;
 use serde::{Deserialize, Serialize};
@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 /// Wrapper class for egg's cost function
 pub struct TensorCost<'a> {
     pub egraph: &'a EGraph<Mdl, TensorAnalysis>,
-    pub cost_model: &'a CostModel,
+    pub cost_model: &'a CostModel<'a>,
 }
 
 impl CostFunction<Mdl> for TensorCost<'_> {
@@ -23,14 +23,16 @@ impl CostFunction<Mdl> for TensorCost<'_> {
 }
 
 /// Class for our cost model
-pub struct CostModel {
+pub struct CostModel<'a> {
     cpp_cost_model: cxx::UniquePtr<ffi::CostModel>, // Holding the C++ cost model
+    tensorinfo_map: &'a HashMap<Id, TensorInfo> // is this lifetime correct lol
 }
 
-impl CostModel {
-    pub fn new() -> Self {
+impl<'a> CostModel<'a> {
+    pub fn new(tensorinfo_map: &'a HashMap<Id, TensorInfo>) -> Self {
         Self {
             cpp_cost_model: ffi::newCostModel(),
+            tensorinfo_map: tensorinfo_map
         }
     }
 
@@ -49,10 +51,14 @@ impl CostModel {
     /// # Returns
     ///
     /// Cost for this enode.
+    pub fn get_shape(&self, id: &Id) -> Vec<i64> {
+        self.tensorinfo_map.get(id).unwrap().shape.iter().map(|&x| x as i64).collect()
+    }
+
     pub fn get_self_cost(&self, egraph: &EGraph<Mdl, TensorAnalysis>, enode: &Mdl) -> f32 {
         let x = |i: &Id| &egraph[*i].data;
         match enode {
-            Mdl::Int(_) | Mdl::Var(_) | Mdl::Input(_) => 0.0,
+            Mdl::Num(_) | Mdl::Var(_) | Mdl::Input(_) => 0.0,
             Mdl::BlackBox_1(_)
             | Mdl::BlackBox_2(_)
             | Mdl::BlackBox_3(_)
@@ -76,23 +82,23 @@ impl CostModel {
             Mdl::SliceOp([input, start_indices, limit_indices, strides]) => 0.0,
             Mdl::TransposeOp([input, permutation]) => 0.0,
             Mdl::MulOp([lhs, rhs]) => {
-                let lhs_dims = [1024, 1024]; // Example dimensions
-                let rhs_dims = [1024, 1024];
+                let lhs_dims = self.get_shape(lhs);
+                let rhs_dims = self.get_shape(rhs);
                 self.cpp_cost_model.getMulOpCost(&lhs_dims, ffi::Type::f32, &rhs_dims, ffi::Type::f32) as f32
             },
             Mdl::AddOp([lhs, rhs]) => {
-                let lhs_dims = [1024, 1024]; // Example dimensions
-                let rhs_dims = [1024, 1024];
+                let lhs_dims = self.get_shape(lhs);
+                let rhs_dims = self.get_shape(rhs);
                 self.cpp_cost_model.getAddOpCost(&lhs_dims, ffi::Type::f32, &rhs_dims, ffi::Type::f32) as f32
             },
             Mdl::DivOp([lhs, rhs]) => {
-                let lhs_dims = [1024, 1024]; // Example dimensions
-                let rhs_dims = [1024, 1024];
+                let lhs_dims = self.get_shape(lhs);
+                let rhs_dims = self.get_shape(rhs);
                 self.cpp_cost_model.getDivOpCost(&lhs_dims, ffi::Type::f32, &rhs_dims, ffi::Type::f32) as f32
             },
             Mdl::SubtractOp([lhs, rhs]) => {
-                let lhs_dims = [1024, 1024]; // Example dimensions
-                let rhs_dims = [1024, 1024];
+                let lhs_dims = self.get_shape(lhs);
+                let rhs_dims = self.get_shape(rhs);
                 self.cpp_cost_model.getSubtractOpCost(&lhs_dims, ffi::Type::f32, &rhs_dims, ffi::Type::f32) as f32
             },
             Mdl::MinOp([lhs, rhs]) => 0.0,
