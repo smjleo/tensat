@@ -25,19 +25,8 @@ pub mod ffi {
         operands: Vec<usize>,
     }
 
-    enum Type {
-        i32,
-        f32,
-    }
-
-    struct Node {
-        name: String,
-        operands: Vec<usize>,
-    }
-
     // take floats from c++ and wrap them into f32s below
     extern "Rust" {
-        type Mdl;
         type Mdl;
         type CppGraphConverter;
         type TensorInfo;
