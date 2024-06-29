@@ -24,7 +24,7 @@ pub const SHUFFLE: i32 = 1;
 
 define_language! {
   pub enum Mdl {
-      "input"              = Input([Id; 1]),  // takes a Var, format: name@dim1_dim2...
+      "input"              = Input([Id; 2]),  // takes Var: name@dim1_dim2, block_arg_number
       "CompareOp"          = CompareOp([Id; 4]), // input1, input2, comparison_direction,
                                                            // comparsion_type
       "BroadcastInDimOp"   = BroadcastInDimOp([Id; 2]), // input, broadcast_dimensions
@@ -141,9 +141,9 @@ impl Analysis<Mdl> for TensorAnalysis {
         match enode {
             Mdl::Var(_) => Self::Data { val: 0, cost: 0 }, /* we might need a name field... */
             Mdl::Num(i) => Self::Data { val: *i, cost: 0 },
-            
+
             // TODO: Here for testing. Remove later and call cost function with appropriate arguments
-            Mdl::Input([node]) => Self::Data { val: 0, cost: 0 },
+            Mdl::Input([node, block_arg_number]) => Self::Data { val: 0, cost: 0 },
             Mdl::MulOp([lhs, rhs]) => Self::Data { val: 0, cost: 10 },
             Mdl::AddOp([lhs, rhs]) => Self::Data { val: 0, cost: 10 },
             Mdl::DivOp([lhs, rhs]) => Self::Data { val: 0, cost: 10 },

@@ -32,7 +32,11 @@ pub mod ffi {
         type TensorInfo;
         fn new_converter() -> Box<CppGraphConverter>;
         // Exposing the constructor functions with Box<TensorInfo>
-        fn new_input(self: &mut CppGraphConverter, dims: &[i32]) -> Box<TensorInfo>;
+        fn new_input(
+            self: &mut CppGraphConverter,
+            block_arg_number: i32,
+            dims: &[i32],
+        ) -> Box<TensorInfo>;
         fn new_compare_op(
             self: &mut CppGraphConverter,
             inpt_1: &TensorInfo,
@@ -252,12 +256,13 @@ impl CppGraphConverter {
         self.rec_expr
     }
 
-    pub fn input(&mut self, dims: &[i32]) -> TensorInfo {
-        let name = self.name_gen.new_input_name() + "@" + &dims.iter().join("_");
+    pub fn input(&mut self, block_arg_number: i32, dims: &[i32]) -> TensorInfo {
+        let name = format!("input_{}", block_arg_number) + "@" + &dims.iter().join("_");
         let node = Mdl::Var(Symbol::from(name));
         let name_id = self.rec_expr.add(node);
-
-        let new_node = Mdl::Input([name_id]);
+        let block_arg_node = Mdl::Num(block_arg_number);
+        let block_arg_node_id = self.rec_expr.add(block_arg_node);
+        let new_node = Mdl::Input([name_id, block_arg_node_id]);
         let (shape, n_dim) = self.shape_from_dim(dims);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -895,8 +900,8 @@ impl CppGraphConverter {
     }
 
     // Wrapper functions for C++ side
-    pub fn new_input(&mut self, dims: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.input(dims))
+    pub fn new_input(&mut self, block_arg_number: i32, dims: &[i32]) -> Box<TensorInfo> {
+        Box::new(self.input(block_arg_number, dims))
     }
 
     pub fn new_compare_op(
@@ -1109,24 +1114,30 @@ impl CppGraphConverter {
     fn convert_to_node(&self) -> Vec<ffi::Node> {
         let mut res: Vec<ffi::Node> = Vec::new();
 
-        let index = |id: Id| usize::from(id);  // TODO: this is probably wrong
-        let convert = |operands: &[Id]| operands.iter().map(|id: &Id| index(*id)).collect::<Vec<usize>>();
-        let new_node = |name: &str, operands: &[Id]| 
-            ffi::Node { 
-                name: name.to_string(), 
-                operands: convert(operands),
-            };
-        
+        let index = |id: Id| usize::from(id); // TODO: this is probably wrong
+        let convert = |operands: &[Id]| {
+            operands
+                .iter()
+                .map(|id: &Id| index(*id))
+                .collect::<Vec<usize>>()
+        };
+        let new_node = |name: &str, operands: &[Id]| ffi::Node {
+            name: name.to_string(),
+            operands: convert(operands),
+        };
+
         let rec_expr_ref = self.get_rec_expr_as_ref();
 
         for mdl in rec_expr_ref.iter() {
             let node = match mdl {
-                Mdl::Var(label) => {
-                    ffi::Node {
-                        name: label.to_string(),
-                        operands: vec![]
-                    }
-                }
+                Mdl::Var(label) => ffi::Node {
+                    name: label.to_string(),
+                    operands: vec![],
+                },
+                Mdl::Num(num) => ffi::Node {
+                    name: "Num".to_string(),
+                    operands: vec![*num as usize],
+                },
                 // TODO: More clever pattern matching
                 Mdl::Input(ops) => new_node("Input", ops),
                 Mdl::ConstantOp(ops) => new_node("ConstantOp", ops),
@@ -1143,12 +1154,12 @@ impl CppGraphConverter {
                 Mdl::TanhOp(ops) => new_node("TanhOp", ops),
                 Mdl::ExpOp(ops) => new_node("ExpOp", ops),
                 Mdl::IotaOp(ops) => new_node("IotaOp", ops),
-                _ => unimplemented!()
-            };   
+                _ => unimplemented!(),
+            };
 
             res.push(node);
         }
-        
+
         res
     }
 
@@ -1165,8 +1176,7 @@ impl CppGraphConverter {
 
         let path = std::env::current_dir().unwrap();
         println!("The current directory is {}", path.display());
-        let rule_file =
-            "src/enzyme_ad/jax/deps/tensat/converted.txt";
+        let rule_file = "src/enzyme_ad/jax/deps/tensat/converted.txt";
 
         let learned_rules =
             read_to_string(rule_file).expect("Something went wrong reading the rule file");
@@ -1228,7 +1238,7 @@ impl CppGraphConverter {
     }
 }
 
-/* 
+/*
 fn dfs_convert(root: &Mdl, rec_expr: &[Mdl]) -> Vec<i32> {
     match root {
         Mdl::Var(label) => {
