@@ -22,6 +22,7 @@ pub mod ffi {
 
     struct Node {
         name: String,
+        label: String,
         operands: Vec<usize>,
     }
 
@@ -1123,6 +1124,7 @@ impl CppGraphConverter {
         };
         let new_node = |name: &str, operands: &[Id]| ffi::Node {
             name: name.to_string(),
+            label: "".to_string(),
             operands: convert(operands),
         };
 
@@ -1131,11 +1133,13 @@ impl CppGraphConverter {
         for mdl in rec_expr_ref.iter() {
             let node = match mdl {
                 Mdl::Var(label) => ffi::Node {
-                    name: label.to_string(),
+                    name: "Var".to_string(),
+                    label: label.to_string(),
                     operands: vec![],
                 },
                 Mdl::Num(num) => ffi::Node {
                     name: "Num".to_string(),
+                    label: "".to_string(),
                     operands: vec![*num as usize],
                 },
                 // TODO: More clever pattern matching
