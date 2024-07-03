@@ -37,7 +37,7 @@ define_language! {
       "GatherOp"           = GatherOp([Id; 10]),
       "SelectOp"           = SelectOp([Id; 3]), // pred, on_true, on_false
       "ConcatenateOp"      = ConcatenateOp([Id; 2]), // inputs, dimension
-      "DotGeneralOp"       = DotGeneralOp([Id; 7]), // lhs, rhs...
+      "DotGeneralOp"       = DotGeneralOp([Id; 8]), // lhs, rhs, ..., shape
       "PadOp"              = PadOp([Id; 5]), // input, padding_value, edge_padding_low,
                                                        // edge_padding_high, interior_padding
       "SliceOp"            = SliceOp([Id; 4]), // input, start_indices, limit_indices, strides

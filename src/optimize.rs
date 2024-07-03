@@ -74,7 +74,7 @@ impl<'a> CostModel<'a> {
             ) => 0.0,
             Mdl::SelectOp([pred, on_true, on_false]) => 0.0,
             Mdl::DotGeneralOp(
-                [lhs, rhs, lhs_batch_dim, rhs_batch_dim, lhs_contract_dim, rhs_contract_dim, precision_config],
+                [lhs, rhs, lhs_batch_dim, rhs_batch_dim, lhs_contract_dim, rhs_contract_dim, precision_config, shape],
             ) => 0.0,
             Mdl::PadOp(
                 [input, padding_value, edge_padding_low, edge_padding_high, interior_padding],

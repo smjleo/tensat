@@ -94,6 +94,7 @@ pub mod ffi {
             lhs_contracting_dimensions: &[i32],
             rhs_contracting_dimensions: &[i32],
             precision_config: &[i32],
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_pad_op(
             self: &mut CppGraphConverter,
@@ -561,6 +562,7 @@ impl CppGraphConverter {
         lhs_contracting_dimensions: &[i32],
         rhs_contracting_dimensions: &[i32],
         precision_config: &[i32],
+        shape: &[i32],
     ) -> TensorInfo {
         // This produces ugly empty nodes when there's no batch dimension
         let lhs_batch_dim_name = &lhs_batching_dimensions.iter().join("_");
@@ -583,6 +585,11 @@ impl CppGraphConverter {
         let precision_config_id = self
             .rec_expr
             .add(Mdl::Var(Symbol::from(precision_config_name)));
+
+        let shape_name = &shape.iter().join("_");
+        let node = Mdl::Var(Symbol::from(shape_name));
+        let shape_id = self.rec_expr.add(node);
+
         let new_node = Mdl::DotGeneralOp([
             lhs.id,
             rhs.id,
@@ -591,7 +598,17 @@ impl CppGraphConverter {
             lhs_contract_dim_name_id,
             rhs_contract_dim_name_id,
             precision_config_id,
+            shape_id,
         ]);
+
+        let (shape_new, n_dim) = self.shape_from_dim(shape);
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            shape: shape_new,
+            n_dim
+        };
+
+        /*
         let mut shape = lhs.shape;
         shape[shape.len() - 1] = rhs.shape[rhs.shape.len() - 1];
         let res = TensorInfo {
@@ -599,6 +616,8 @@ impl CppGraphConverter {
             shape,
             n_dim: lhs.n_dim,
         };
+        */
+
         self.tensorinfo_map.insert(res.id, res);
         res
     }
@@ -985,6 +1004,7 @@ impl CppGraphConverter {
         lhs_contracting_dimensions: &[i32],
         rhs_contracting_dimensions: &[i32],
         precision_config: &[i32],
+        shape: &[i32]
     ) -> Box<TensorInfo> {
         Box::new(self.dot_general_op(
             *lhs,
@@ -994,6 +1014,7 @@ impl CppGraphConverter {
             lhs_contracting_dimensions,
             rhs_contracting_dimensions,
             precision_config,
+            shape
         ))
     }
 
