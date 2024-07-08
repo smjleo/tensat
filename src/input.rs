@@ -174,7 +174,11 @@ pub mod ffi {
             updates: &TensorInfo,
             dimension_numbers: i32,
         ) -> Box<TensorInfo>;
-
+        fn new_blackbox_1_op(
+            self: &mut CppGraphConverter,
+            inpt: &TensorInfo,
+            cpp_num: i32,
+        ) -> Box<TensorInfo>;
         fn optimize(self: &CppGraphConverter) -> Vec<Node>;
         fn print_rec_expr(self: &CppGraphConverter);
         fn pretty_print_rec_expr(self: &CppGraphConverter, width: i32);
@@ -275,9 +279,9 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn blackbox_1(&mut self, inpt: TensorInfo, cpp_name: String) -> TensorInfo {
-        let new_node = Mdl::BlackBox_1([inpt.id]);
-        let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
+    pub fn blackbox_1(&mut self, inpt: TensorInfo, cpp_num: i32) -> TensorInfo {
+        let cpp_num_node = self.add_or_get_val(cpp_num);
+        let new_node = Mdl::BlackBox_1([inpt.id, cpp_num_node]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
             shape: inpt.shape, // This is an example, you might want to calculate actual shape
@@ -605,7 +609,7 @@ impl CppGraphConverter {
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
             shape: shape_new,
-            n_dim
+            n_dim,
         };
 
         /*
@@ -1004,7 +1008,7 @@ impl CppGraphConverter {
         lhs_contracting_dimensions: &[i32],
         rhs_contracting_dimensions: &[i32],
         precision_config: &[i32],
-        shape: &[i32]
+        shape: &[i32],
     ) -> Box<TensorInfo> {
         Box::new(self.dot_general_op(
             *lhs,
@@ -1014,7 +1018,7 @@ impl CppGraphConverter {
             lhs_contracting_dimensions,
             rhs_contracting_dimensions,
             precision_config,
-            shape
+            shape,
         ))
     }
 
@@ -1121,6 +1125,10 @@ impl CppGraphConverter {
         Box::new(self.scatter_op(*inpt, *scatter_indices, *updates, dimension_numbers))
     }
 
+    pub fn new_blackbox_1_op(&mut self, inpt: &TensorInfo, cpp_num: i32) -> Box<TensorInfo> {
+        Box::new(self.blackbox_1(*inpt, cpp_num))
+    }
+
     pub fn print_rec_expr(&self) {
         println!("{:?}", self.rec_expr)
     }
@@ -1179,6 +1187,7 @@ impl CppGraphConverter {
                 Mdl::TanhOp(ops) => new_node("TanhOp", ops),
                 Mdl::ExpOp(ops) => new_node("ExpOp", ops),
                 Mdl::IotaOp(ops) => new_node("IotaOp", ops),
+                Mdl::BlackBox_1(ops) => new_node("blackbox_1", ops),
                 _ => unimplemented!(),
             };
 
