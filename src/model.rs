@@ -62,7 +62,7 @@ define_language! {
       "ScatterOp"          = ScatterOp([Id; 4]), // input, scatter_indices, updates, dimension_numbers
 
       // Maybe we can have a single enode with variable arity
-      "blackbox_1"         = BlackBox_1([Id; 1]),
+      "blackbox_1"         = BlackBox_1([Id; 2]),
       "blackbox_2"         = BlackBox_2([Id; 2]),
       "blackbox_3"         = BlackBox_3([Id; 3]),
       "blackbox_4"         = BlackBox_4([Id; 4]),
@@ -153,7 +153,7 @@ impl Analysis<Mdl> for TensorAnalysis {
             // Mdl::BroadcastInDimOp([input, dimensions, cost]) => Self::Data { val: 0, cost: x(cost).val },
             // Mdl::ConvertOp([input, cost]) => Self::Data { val: 0, cost: x(cost).val },
             // Mdl::ReduceOp([input, dimensions, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            // Mdl::ReshapeOp([input, shape, cost]) => Self::Data { val: 0, cost: x(cost).val },
+            Mdl::ReshapeOp([operand, shape]) => Self::Data { val: 0, cost: 10 },
             // Mdl::GatherOp([input, start_indices, dimension_numbers, cost]) => Self::Data { val: 0, cost: x(cost).val },
             // Mdl::SelectOp([pred, on_true, on_false, cost]) => Self::Data { val: 0, cost: x(cost).val },
             // Mdl::ConcatenateOp([inputs, dimension, cost]) => Self::Data { val: 0, cost: x(cost).val },
@@ -175,7 +175,7 @@ impl Analysis<Mdl> for TensorAnalysis {
             // Mdl::DynamicUpdateSliceOp([operand, update, start_indices, cost]) => Self::Data { val: 0, cost: x(cost).val },
             // Mdl::DynamicSliceOp([operand, start_indices, slice_sizes, cost]) => Self::Data { val: 0, cost: x(cost).val },
             // Mdl::ScatterOp([input, scatter_indices, updates, dimension_numbers, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            // Mdl::BlackBox_1([input]) => Self::Data { val: 0, cost: 0 },
+            Mdl::BlackBox_1([input, cpp_num]) => Self::Data { val: 0, cost: 0 },
             // Mdl::BlackBox_2([input1, input2]) => Self::Data { val: 0, cost: 0 },
             // Mdl::BlackBox_3([input1, input2, input3]) => Self::Data { val: 0, cost: 0 },
             // Mdl::BlackBox_4([input1, input2, input3, input4]) => Self::Data { val: 0, cost: 0 },
