@@ -25,14 +25,14 @@ impl CostFunction<Mdl> for TensorCost<'_> {
 /// Class for our cost model
 pub struct CostModel<'a> {
     cpp_cost_model: cxx::UniquePtr<ffi::CostModel>, // Holding the C++ cost model
-    tensorinfo_map: &'a HashMap<Id, TensorInfo> // is this lifetime correct lol
+    tensorinfo_map: &'a HashMap<Id, TensorInfo>,    // is this lifetime correct lol
 }
 
 impl<'a> CostModel<'a> {
     pub fn new(tensorinfo_map: &'a HashMap<Id, TensorInfo>) -> Self {
         Self {
             cpp_cost_model: ffi::newCostModel(),
-            tensorinfo_map: tensorinfo_map
+            tensorinfo_map: tensorinfo_map,
         }
     }
 
@@ -52,18 +52,25 @@ impl<'a> CostModel<'a> {
     ///
     /// Cost for this enode.
     pub fn get_shape(&self, id: &Id) -> Vec<i64> {
-        self.tensorinfo_map.get(id).unwrap().shape.iter().map(|&x| x as i64).collect()
+        self.tensorinfo_map
+            .get(id)
+            .unwrap()
+            .shape
+            .iter()
+            .map(|&x| x as i64)
+            .collect()
     }
 
     pub fn get_self_cost(&self, egraph: &EGraph<Mdl, TensorAnalysis>, enode: &Mdl) -> f32 {
         let x = |i: &Id| &egraph[*i].data;
         match enode {
             Mdl::Num(_) | Mdl::Var(_) | Mdl::Input(_) => 0.0,
-            Mdl::BlackBox_1(_)
-            | Mdl::BlackBox_2(_)
-            | Mdl::BlackBox_3(_)
-            | Mdl::BlackBox_4(_)
-            | Mdl::BlackBox_5(_) => 0.0,
+            Mdl::BlackBox(_) => 0.0,
+            // Mdl::BlackBox_1(_) => 0.0,
+            // | Mdl::BlackBox_2(_)
+            // | Mdl::BlackBox_3(_)
+            // | Mdl::BlackBox_4(_)
+            // | Mdl::BlackBox_5(_) => 0.0,
             Mdl::CompareOp([input1, input2, comparison_direction, comparison_type]) => 0.0,
             Mdl::BroadcastInDimOp([input, broadcast_dimension]) => 0.0,
             Mdl::ConvertOp([input, output_type]) => 0.0,
@@ -84,23 +91,43 @@ impl<'a> CostModel<'a> {
             Mdl::MulOp([lhs, rhs]) => {
                 let lhs_dims = self.get_shape(lhs);
                 let rhs_dims = self.get_shape(rhs);
-                self.cpp_cost_model.getMulOpCost(&lhs_dims, ffi::Type::f32, &rhs_dims, ffi::Type::f32) as f32
-            },
+                self.cpp_cost_model.getMulOpCost(
+                    &lhs_dims,
+                    ffi::Type::f32,
+                    &rhs_dims,
+                    ffi::Type::f32,
+                ) as f32
+            }
             Mdl::AddOp([lhs, rhs]) => {
                 let lhs_dims = self.get_shape(lhs);
                 let rhs_dims = self.get_shape(rhs);
-                self.cpp_cost_model.getAddOpCost(&lhs_dims, ffi::Type::f32, &rhs_dims, ffi::Type::f32) as f32
-            },
+                self.cpp_cost_model.getAddOpCost(
+                    &lhs_dims,
+                    ffi::Type::f32,
+                    &rhs_dims,
+                    ffi::Type::f32,
+                ) as f32
+            }
             Mdl::DivOp([lhs, rhs]) => {
                 let lhs_dims = self.get_shape(lhs);
                 let rhs_dims = self.get_shape(rhs);
-                self.cpp_cost_model.getDivOpCost(&lhs_dims, ffi::Type::f32, &rhs_dims, ffi::Type::f32) as f32
-            },
+                self.cpp_cost_model.getDivOpCost(
+                    &lhs_dims,
+                    ffi::Type::f32,
+                    &rhs_dims,
+                    ffi::Type::f32,
+                ) as f32
+            }
             Mdl::SubtractOp([lhs, rhs]) => {
                 let lhs_dims = self.get_shape(lhs);
                 let rhs_dims = self.get_shape(rhs);
-                self.cpp_cost_model.getSubtractOpCost(&lhs_dims, ffi::Type::f32, &rhs_dims, ffi::Type::f32) as f32
-            },
+                self.cpp_cost_model.getSubtractOpCost(
+                    &lhs_dims,
+                    ffi::Type::f32,
+                    &rhs_dims,
+                    ffi::Type::f32,
+                ) as f32
+            }
             Mdl::MinOp([lhs, rhs]) => 0.0,
             Mdl::MaxOp([lhs, rhs]) => 0.0,
             Mdl::NegOp([input]) => 0.0,
