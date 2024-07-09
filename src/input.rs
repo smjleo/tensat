@@ -174,17 +174,19 @@ pub mod ffi {
             updates: &TensorInfo,
             dimension_numbers: i32,
         ) -> Box<TensorInfo>;
-        fn new_blackbox_1_op(
+        fn new_blackbox_op(
             self: &mut CppGraphConverter,
-            inpt: &TensorInfo,
+            inpts: &[*mut TensorInfo],
             cpp_num: i32,
         ) -> Box<TensorInfo>;
+        // fn new_blackbox_1_op(
+        //     self: &mut CppGraphConverter,
+        //     inpt: &TensorInfo,
+        //     cpp_num: i32,
+        // ) -> Box<TensorInfo>;
         fn optimize(self: &CppGraphConverter) -> Vec<Node>;
         fn print_rec_expr(self: &CppGraphConverter);
         fn pretty_print_rec_expr(self: &CppGraphConverter, width: i32);
-        // fn get_rec_expr_as_ref(self: &CppGraphConverter) -> &[Mdl];
-        // fn dfs_convert(root: &Mdl, rec_expr: &[Mdl]) -> Vec<i32>;
-        // fn test_cost_model(op: String) -> u64;
     }
 
     unsafe extern "C++" {
@@ -266,8 +268,7 @@ impl CppGraphConverter {
         let name = format!("input_{}", block_arg_number) + "@" + &dims.iter().join("_");
         let node = Mdl::Var(Symbol::from(name));
         let name_id = self.rec_expr.add(node);
-        let block_arg_node = Mdl::Num(block_arg_number);
-        let block_arg_node_id = self.rec_expr.add(block_arg_node);
+        let block_arg_node_id = self.add_or_get_val(block_arg_number);
         let new_node = Mdl::Input([name_id, block_arg_node_id]);
         let (shape, n_dim) = self.shape_from_dim(dims);
         let res = TensorInfo {
@@ -279,91 +280,112 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn blackbox_1(&mut self, inpt: TensorInfo, cpp_num: i32) -> TensorInfo {
+    pub fn blackbox(&mut self, inpts: &[TensorInfo], cpp_num: i32) -> TensorInfo {
         let cpp_num_node = self.add_or_get_val(cpp_num);
-        let new_node = Mdl::BlackBox_1([inpt.id, cpp_num_node]);
+        let mut ids: Vec<Id> = inpts.iter().map(|inpt| inpt.id).collect();
+        ids.push(cpp_num_node);
+
+        // Convert the vector of Ids to a boxed slice and create the BlackBox node
+        let new_node = Mdl::BlackBox(ids.into_boxed_slice());
+
+        // TODO: overhaul shape handling everywhere
+        let shape = inpts[0].shape;
+        let n_dim = inpts[0].n_dim;
+
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: inpt.shape, // This is an example, you might want to calculate actual shape
-            n_dim: inpt.n_dim,
+            shape: shape,
+            n_dim: n_dim,
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    pub fn blackbox_2(
-        &mut self,
-        inpt_1: TensorInfo,
-        inpt_2: TensorInfo,
-        cpp_name: String,
-    ) -> TensorInfo {
-        let new_node = Mdl::BlackBox_2([inpt_1.id, inpt_2.id]);
-        let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
-            n_dim: inpt_1.n_dim,
-        };
-        self.tensorinfo_map.insert(res.id, res);
-        res
-    }
-
-    pub fn blackbox_3(
-        &mut self,
-        inpt_1: TensorInfo,
-        inpt_2: TensorInfo,
-        inpt_3: TensorInfo,
-        cpp_name: String,
-    ) -> TensorInfo {
-        let new_node = Mdl::BlackBox_3([inpt_1.id, inpt_2.id, inpt_3.id]);
-        let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
-            n_dim: inpt_1.n_dim,
-        };
-        self.tensorinfo_map.insert(res.id, res);
-        res
-    }
-
-    pub fn blackbox_4(
-        &mut self,
-        inpt_1: TensorInfo,
-        inpt_2: TensorInfo,
-        inpt_3: TensorInfo,
-        inpt_4: TensorInfo,
-        cpp_name: String,
-    ) -> TensorInfo {
-        let new_node = Mdl::BlackBox_4([inpt_1.id, inpt_2.id, inpt_3.id, inpt_4.id]);
-        let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
-            n_dim: inpt_1.n_dim,
-        };
-        self.tensorinfo_map.insert(res.id, res);
-        res
-    }
-
-    pub fn blackbox_5(
-        &mut self,
-        inpt_1: TensorInfo,
-        inpt_2: TensorInfo,
-        inpt_3: TensorInfo,
-        inpt_4: TensorInfo,
-        inpt_5: TensorInfo,
-        cpp_name: String,
-    ) -> TensorInfo {
-        let new_node = Mdl::BlackBox_5([inpt_1.id, inpt_2.id, inpt_3.id, inpt_4.id, inpt_5.id]);
-        let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
-            n_dim: inpt_1.n_dim,
-        };
-        self.tensorinfo_map.insert(res.id, res);
-        res
-    }
+    // pub fn blackbox_1(&mut self, inpt: TensorInfo, cpp_num: i32) -> TensorInfo {
+    //     let cpp_num_node = self.add_or_get_val(cpp_num);
+    //     let new_node = Mdl::BlackBox_1([inpt.id, cpp_num_node]);
+    //     let res = TensorInfo {
+    //         id: self.rec_expr.add(new_node),
+    //         shape: inpt.shape, // This is an example, you might want to calculate actual shape
+    //         n_dim: inpt.n_dim,
+    //     };
+    //     self.tensorinfo_map.insert(res.id, res);
+    //     res
+    // }
+    //
+    // pub fn blackbox_2(
+    //     &mut self,
+    //     inpt_1: TensorInfo,
+    //     inpt_2: TensorInfo,
+    //     cpp_num: i32,
+    // ) -> TensorInfo {
+    //     let cpp_num_node = self.add_or_get_val(cpp_num);
+    //     let new_node = Mdl::BlackBox_2([inpt_1.id, inpt_2.id, cpp_num_node]);
+    //     let res = TensorInfo {
+    //         id: self.rec_expr.add(new_node),
+    //         shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
+    //         n_dim: inpt_1.n_dim,
+    //     };
+    //     self.tensorinfo_map.insert(res.id, res);
+    //     res
+    // }
+    //
+    // pub fn blackbox_3(
+    //     &mut self,
+    //     inpt_1: TensorInfo,
+    //     inpt_2: TensorInfo,
+    //     inpt_3: TensorInfo,
+    //     cpp_name: String,
+    // ) -> TensorInfo {
+    //     let new_node = Mdl::BlackBox_3([inpt_1.id, inpt_2.id, inpt_3.id]);
+    //     let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
+    //     let res = TensorInfo {
+    //         id: self.rec_expr.add(new_node),
+    //         shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
+    //         n_dim: inpt_1.n_dim,
+    //     };
+    //     self.tensorinfo_map.insert(res.id, res);
+    //     res
+    // }
+    //
+    // pub fn blackbox_4(
+    //     &mut self,
+    //     inpt_1: TensorInfo,
+    //     inpt_2: TensorInfo,
+    //     inpt_3: TensorInfo,
+    //     inpt_4: TensorInfo,
+    //     cpp_name: String,
+    // ) -> TensorInfo {
+    //     let new_node = Mdl::BlackBox_4([inpt_1.id, inpt_2.id, inpt_3.id, inpt_4.id]);
+    //     let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
+    //     let res = TensorInfo {
+    //         id: self.rec_expr.add(new_node),
+    //         shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
+    //         n_dim: inpt_1.n_dim,
+    //     };
+    //     self.tensorinfo_map.insert(res.id, res);
+    //     res
+    // }
+    //
+    // pub fn blackbox_5(
+    //     &mut self,
+    //     inpt_1: TensorInfo,
+    //     inpt_2: TensorInfo,
+    //     inpt_3: TensorInfo,
+    //     inpt_4: TensorInfo,
+    //     inpt_5: TensorInfo,
+    //     cpp_name: String,
+    // ) -> TensorInfo {
+    //     let new_node = Mdl::BlackBox_5([inpt_1.id, inpt_2.id, inpt_3.id, inpt_4.id, inpt_5.id]);
+    //     let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
+    //     let res = TensorInfo {
+    //         id: self.rec_expr.add(new_node),
+    //         shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
+    //         n_dim: inpt_1.n_dim,
+    //     };
+    //     self.tensorinfo_map.insert(res.id, res);
+    //     res
+    // }
 
     pub fn compare_op(
         &mut self,
@@ -1125,9 +1147,23 @@ impl CppGraphConverter {
         Box::new(self.scatter_op(*inpt, *scatter_indices, *updates, dimension_numbers))
     }
 
-    pub fn new_blackbox_1_op(&mut self, inpt: &TensorInfo, cpp_num: i32) -> Box<TensorInfo> {
-        Box::new(self.blackbox_1(*inpt, cpp_num))
+    pub fn new_blackbox_op(&mut self, inpts: &[*mut TensorInfo], cpp_num: i32) -> Box<TensorInfo> {
+        let tensor_infos: Vec<TensorInfo> = inpts.iter().map(|&ptr| unsafe { *ptr }).collect();
+        Box::new(self.blackbox(&tensor_infos, cpp_num))
     }
+
+    // pub fn new_blackbox_1_op(&mut self, inpt: &TensorInfo, cpp_num: i32) -> Box<TensorInfo> {
+    //     Box::new(self.blackbox_1(*inpt, cpp_num))
+    // }
+    //
+    // pub fn new_blackbox_2_op(
+    //     &mut self,
+    //     inpt_1: &TensorInfo,
+    //     inpt_2: &TensorInfo,
+    //     cpp_num: i32,
+    // ) -> Box<TensorInfo> {
+    //     Box::new(self.blackbox_2(*inpt_1, *inpt_2, cpp_num))
+    // }
 
     pub fn print_rec_expr(&self) {
         println!("{:?}", self.rec_expr)
@@ -1187,7 +1223,7 @@ impl CppGraphConverter {
                 Mdl::TanhOp(ops) => new_node("TanhOp", ops),
                 Mdl::ExpOp(ops) => new_node("ExpOp", ops),
                 Mdl::IotaOp(ops) => new_node("IotaOp", ops),
-                Mdl::BlackBox_1(ops) => new_node("blackbox_1", ops),
+                Mdl::BlackBox(ops) => new_node("blackbox", ops),
                 _ => unimplemented!(),
             };
 
@@ -1271,63 +1307,6 @@ impl CppGraphConverter {
         self.convert_to_node()
     }
 }
-
-/*
-fn dfs_convert(root: &Mdl, rec_expr: &[Mdl]) -> Vec<i32> {
-    match root {
-        Mdl::Var(label) => {
-            let label_str = label.as_str();
-            let mut res = if let Some(start_idx) = label_str.find("input_") {
-                // This is an input variable. Note that this also has a shape
-                // TODO: we need to make the input numbers correspond with the llvm::BlockArgument
-                // identifier numbers
-                let start = start_idx + 6; // Skip the "input_" part
-                if let Some(end_idx) = label_str[start..].find('@') {
-                    let end = start + end_idx;
-                    let integer_str = &label_str[start..end];
-                    vec![integer_str.parse().unwrap()]
-                } else {
-                    // Couldn't find '@' after "input_", handle this case
-                    vec![]
-                }
-            } else {
-                // This is a shape
-                label_str
-                    .split('_')
-                    .map(|s| s.parse::<i32>().unwrap())
-                    .collect()
-            };
-            res.push(1); // hacky enum
-            res
-        }
-        Mdl::Input([id]) => {
-            // This is the Id of a Var
-            let size: usize = (*id).into();
-            let mut res = dfs_convert(&rec_expr[size], rec_expr);
-            res.push(2); // hacky enum
-            res
-        }
-        // Mdl::ConstantOp([]) => 0.0,
-        // Mdl::ReshapeOp([input, shape]) => 0.0,
-        // Mdl::DotGeneralOp(
-        //     [lhs, rhs, lhs_batch_dim, rhs_batch_dim, lhs_contract_dim, rhs_contract_dim, precision_config],
-        // ) => 0.0,
-        // Mdl::TransposeOp([input, permutation]) => 0.0,
-        // Mdl::MulOp([lhs, rhs]) =>
-        // Mdl::AddOp([lhs, rhs]) =>
-        // Mdl::DivOp([lhs, rhs]) =>
-        // Mdl::SubtractOp([lhs, rhs]) =>
-        // Mdl::MinOp([lhs, rhs]) => 0.0,
-        // Mdl::MaxOp([lhs, rhs]) => 0.0,
-        // Mdl::NegOp([input]) => 0.0,
-        // Mdl::TanhOp([input]) => 0.0,
-        // Mdl::ExpOp([input]) => 0.0,
-        // Mdl::IotaOp([iota_dimension, shape]) => 0.0,
-        _ => vec![0],
-    }
-}
-
-*/
 
 fn extract_by_ilp(
     egraph: &EGraph<Mdl, TensorAnalysis>,
