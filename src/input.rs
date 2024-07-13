@@ -1205,6 +1205,31 @@ impl CppGraphConverter {
         let do_filter_after = no_cycle && filter_after;
         let rules = rules_from_str(split_rules, do_filter_after);
 
+        fn decreasing_perm(var: &'static str) -> impl Fn(&mut EGraph<Mdl, ()>, Id, &Subst) -> bool {
+            let var = var.parse().unwrap();
+            move |egraph, _, subst: &Subst| {
+                let eclass = &egraph[subst[var]];
+                for node in eclass.iter() {
+                    match node {
+                        Mdl::Vec(vec) => { 
+                            // TODO: maybe check it's a permutation too, instead of just assuming
+                            
+                        }
+                        _ => todo!()
+                    }
+                }
+                // We should see a Vec
+                assert!(false);
+                return false
+            }
+        }
+        
+        let condition_rules: Vec<Rewrite<Mdl, ()>> = vec![
+            rewrite!("transpose-of-transpose"; 
+                    "(TransposeOp (TransposeOp ?x ?p) ?p)" => "?p"
+                     if decreasing_perm("?p")),
+        ];
+
         let iter_multi = 2;
         let node_multi = 30000;
         let multi_rules: Vec<(&str, bool)> = PRE_DEFINED_MULTI
