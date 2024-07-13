@@ -23,7 +23,7 @@ pub mod ffi {
     struct Node {
         name: String,
         label: String,
-        operands: Vec<usize>,
+        operands: Vec<i32>,
     }
 
     // take floats from c++ and wrap them into f32s below
@@ -1129,12 +1129,12 @@ impl CppGraphConverter {
     fn convert_to_node(&self) -> Vec<ffi::Node> {
         let mut res: Vec<ffi::Node> = Vec::new();
 
-        let index = |id: Id| usize::from(id); // TODO: this is probably wrong
+        let index = |id: Id| (usize::from(id) as i32); // TODO: this is probably wrong
         let convert = |operands: &[Id]| {
             operands
                 .iter()
                 .map(|id: &Id| index(*id))
-                .collect::<Vec<usize>>()
+                .collect::<Vec<i32>>()
         };
         let new_node = |name: &str, operands: &[Id]| ffi::Node {
             name: name.to_string(),
@@ -1154,7 +1154,7 @@ impl CppGraphConverter {
                 Mdl::Num(num) => ffi::Node {
                     name: "Num".to_string(),
                     label: "".to_string(),
-                    operands: vec![*num as usize],
+                    operands: vec![*num],
                 },
                 // TODO: More clever pattern matching
                 Mdl::Vec(ops) => new_node("Vec", ops),
@@ -1220,11 +1220,11 @@ impl CppGraphConverter {
                 }
                 // We should see a Vec
                 assert!(false);
-                return false
+                false
             }
         }
         
-        let condition_rules: Vec<Rewrite<Mdl, ()>> = vec![
+        let conditional_rules: Vec<Rewrite<Mdl, ()>> = vec![
             rewrite!("transpose-of-transpose"; 
                     "(TransposeOp (TransposeOp ?x ?p) ?p)" => "?p"
                      if decreasing_perm("?p")),
