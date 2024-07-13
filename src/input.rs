@@ -264,6 +264,13 @@ impl CppGraphConverter {
         self.rec_expr
     }
 
+    fn vec_node(&mut self, seq: &[i32]) -> Id {
+        let vec: Vec<Id> = seq.iter().map(|n| self.rec_expr.add(Mdl::Num(*n))).collect();
+        let node = Mdl::Vec(vec);
+        let id = self.rec_expr.add(node);
+        id
+    }
+
     pub fn input(&mut self, block_arg_number: i32, dims: &[i32]) -> TensorInfo {
         let name = format!("input_{}", block_arg_number) + "@" + &dims.iter().join("_");
         let node = Mdl::Var(Symbol::from(name));
@@ -412,9 +419,7 @@ impl CppGraphConverter {
     }
 
     pub fn broadcast_in_dim(&mut self, inpt: TensorInfo, dimensions: &[i32]) -> TensorInfo {
-        let dim_name = &dimensions.iter().join("_");
-        let node = Mdl::Var(Symbol::from(dim_name));
-        let dimensions_id = self.rec_expr.add(node);
+        let dimensions_id = self.vec_node(dimensions);
         let new_node = Mdl::BroadcastInDimOp([inpt.id, dimensions_id]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -440,9 +445,7 @@ impl CppGraphConverter {
 
     // needs to take in a variadic number of input tensors
     pub fn reduce_op(&mut self, inpt: TensorInfo, dimensions: &[i32]) -> TensorInfo {
-        let dim_name = &dimensions.iter().join("_");
-        let node = Mdl::Var(Symbol::from(dim_name));
-        let dimensions_id = self.rec_expr.add(node);
+        let dimensions_id = self.vec_node(dimensions);
         let new_node = Mdl::ReduceOp([inpt.id, dimensions_id]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -454,9 +457,7 @@ impl CppGraphConverter {
     }
 
     pub fn reshape_op(&mut self, inpt: TensorInfo, shape: &[i32]) -> TensorInfo {
-        let shape_name = &shape.iter().join("_");
-        let node = Mdl::Var(Symbol::from(shape_name));
-        let shape_id = self.rec_expr.add(node);
+        let shape_id = self.vec_node(shape);
         let new_node = Mdl::ReshapeOp([inpt.id, shape_id]);
         let (shape_new, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
@@ -483,27 +484,12 @@ impl CppGraphConverter {
         slice_sizes: &[i32],
         indices_are_sorted: i32,
     ) -> TensorInfo {
-        let offset_dims_name = &offset_dims.iter().join("_");
-        let collapsed_slice_dims_name = &collapsed_slice_dims.iter().join("_");
-        let operand_batching_dims_name = &operand_batching_dims.iter().join("_");
-        let start_indices_batching_dims_name = &start_indices_batching_dims.iter().join("_");
-        let start_index_map_name = &start_index_map.iter().join("_");
-        let slice_sizes_name = &slice_sizes.iter().join("_");
-
-        let offset_dims_id = self.rec_expr.add(Mdl::Var(Symbol::from(offset_dims_name)));
-        let collapsed_slice_dims_id = self
-            .rec_expr
-            .add(Mdl::Var(Symbol::from(collapsed_slice_dims_name)));
-        let operand_batching_dims_id = self
-            .rec_expr
-            .add(Mdl::Var(Symbol::from(operand_batching_dims_name)));
-        let start_indices_batching_dims_id = self
-            .rec_expr
-            .add(Mdl::Var(Symbol::from(start_indices_batching_dims_name)));
-        let start_index_map_id = self
-            .rec_expr
-            .add(Mdl::Var(Symbol::from(start_index_map_name)));
-        let slice_sizes_id = self.rec_expr.add(Mdl::Var(Symbol::from(slice_sizes_name)));
+        let offset_dims_id = self.vec_node(offset_dims);
+        let collapsed_slice_dims_id = self.vec_node(collapsed_slice_dims);
+        let operand_batching_dims_id = self.vec_node(operand_batching_dims);
+        let start_indices_batching_dims_id = self.vec_node(start_indices_batching_dims);
+        let start_index_map_id = self.vec_node(start_index_map);
+        let slice_sizes_id = self.vec_node(slice_sizes);
         let index_vector_dim_id = self.add_or_get_val(index_vector_dim);
         let indices_are_sorted_id = self.add_or_get_val(indices_are_sorted);
 
@@ -591,30 +577,12 @@ impl CppGraphConverter {
         shape: &[i32],
     ) -> TensorInfo {
         // This produces ugly empty nodes when there's no batch dimension
-        let lhs_batch_dim_name = &lhs_batching_dimensions.iter().join("_");
-        let rhs_batch_dim_name = &rhs_batching_dimensions.iter().join("_");
-        let lhs_contract_dim_name = &lhs_contracting_dimensions.iter().join("_");
-        let rhs_contract_dim_name = &rhs_contracting_dimensions.iter().join("_");
-        let precision_config_name = &precision_config.iter().join("_");
-        let lhs_batch_dim_name_id = self
-            .rec_expr
-            .add(Mdl::Var(Symbol::from(lhs_batch_dim_name)));
-        let rhs_batch_dim_name_id = self
-            .rec_expr
-            .add(Mdl::Var(Symbol::from(lhs_batch_dim_name)));
-        let lhs_contract_dim_name_id = self
-            .rec_expr
-            .add(Mdl::Var(Symbol::from(lhs_contract_dim_name)));
-        let rhs_contract_dim_name_id = self
-            .rec_expr
-            .add(Mdl::Var(Symbol::from(rhs_contract_dim_name)));
-        let precision_config_id = self
-            .rec_expr
-            .add(Mdl::Var(Symbol::from(precision_config_name)));
-
-        let shape_name = &shape.iter().join("_");
-        let node = Mdl::Var(Symbol::from(shape_name));
-        let shape_id = self.rec_expr.add(node);
+        let lhs_batch_dim_name_id = self.vec_node(lhs_batching_dimensions);
+        let rhs_batch_dim_name_id = self.vec_node(rhs_batching_dimensions);
+        let lhs_contract_dim_name_id = self.vec_node(lhs_contracting_dimensions);
+        let rhs_contract_dim_name_id = self.vec_node(rhs_contracting_dimensions);
+        let precision_config_id = self.vec_node(precision_config);
+        let shape_id = self.vec_node(shape);
 
         let new_node = Mdl::DotGeneralOp([
             lhs.id,
@@ -656,19 +624,9 @@ impl CppGraphConverter {
         edge_padding_high: &[i32],
         interior_padding: &[i32],
     ) -> TensorInfo {
-        let edge_padding_low_name = &edge_padding_low.iter().join("_");
-        let edge_padding_high_name = &edge_padding_high.iter().join("_");
-        let interior_padding_name = &interior_padding.iter().join("_");
-
-        let edge_padding_low_id = self
-            .rec_expr
-            .add(Mdl::Var(Symbol::from(edge_padding_low_name)));
-        let edge_padding_high_id = self
-            .rec_expr
-            .add(Mdl::Var(Symbol::from(edge_padding_high_name)));
-        let interior_padding_id = self
-            .rec_expr
-            .add(Mdl::Var(Symbol::from(interior_padding_name)));
+        let edge_padding_low_id = self.vec_node(edge_padding_low);
+        let edge_padding_high_id = self.vec_node(edge_padding_high);
+        let interior_padding_id = self.vec_node(interior_padding);
         let padding_value_id = self.add_or_get_val(padding_value);
 
         let new_node = Mdl::PadOp([
@@ -703,15 +661,9 @@ impl CppGraphConverter {
         limit_indices: &[i32],
         strides: &[i32],
     ) -> TensorInfo {
-        let start_indices_name = &start_indices.iter().join("_");
-        let start_indices_node = Mdl::Var(Symbol::from(start_indices_name));
-        let start_indices_id = self.rec_expr.add(start_indices_node);
-        let limit_indices_name = &limit_indices.iter().join("_");
-        let limit_indices_node = Mdl::Var(Symbol::from(limit_indices_name));
-        let limit_indices_id = self.rec_expr.add(limit_indices_node);
-        let strides_name = &strides.iter().join("_");
-        let strides_node = Mdl::Var(Symbol::from(strides_name));
-        let strides_id = self.rec_expr.add(strides_node);
+        let start_indices_id = self.vec_node(start_indices);
+        let limit_indices_id = self.vec_node(limit_indices);
+        let strides_id = self.vec_node(strides);
         let new_node = Mdl::SliceOp([inpt.id, start_indices_id, limit_indices_id, strides_id]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -723,9 +675,7 @@ impl CppGraphConverter {
     }
 
     pub fn transpose_op(&mut self, inpt: TensorInfo, permutation: &[i32]) -> TensorInfo {
-        let permutation_name = &permutation.iter().join("_");
-        let node = Mdl::Var(Symbol::from(permutation_name));
-        let permutation_id = self.rec_expr.add(node);
+        let permutation_id = self.vec_node(permutation);
         let new_node = Mdl::TransposeOp([inpt.id, permutation_id]);
         let mut shape = [0; MAX_DIM];
         let n_dim = inpt.n_dim;
@@ -842,8 +792,7 @@ impl CppGraphConverter {
 
     pub fn iota_op(&mut self, iota_dimension: i32, shape: &[i32]) -> TensorInfo {
         let iota_dim_id = self.add_or_get_val(iota_dimension);
-        let shape_name = &shape.iter().join("_");
-        let shape_id = self.rec_expr.add(Mdl::Var(Symbol::from(shape_name)));
+        let shape_id = self.vec_node(shape);
         let new_node = Mdl::IotaOp([iota_dim_id, shape_id]);
         let (shape_new, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
@@ -1208,6 +1157,7 @@ impl CppGraphConverter {
                     operands: vec![*num as usize],
                 },
                 // TODO: More clever pattern matching
+                Mdl::Vec(ops) => new_node("Vec", ops),
                 Mdl::Input(ops) => new_node("Input", ops),
                 Mdl::ConstantOp(ops) => new_node("ConstantOp", ops),
                 Mdl::ReshapeOp(ops) => new_node("ReshapeOp", ops),
@@ -1237,12 +1187,12 @@ impl CppGraphConverter {
         let start = &self.rec_expr;
 
         // Configuration
-        let n_sec = 10; // seconds for timeout
+        let n_sec = 60; // seconds for timeout
         let use_multi = false; // whether to use multi patterns
         let no_cycle = false; // is our graph by definition acyclic?
         let filter_after = false; // vanilla filtering or efficient filtering
         let iter_limit = 10000;
-        let node_limit = 50000; // max nodes in e-graph
+        let node_limit = 5000000; // max nodes in e-graph
 
         let path = std::env::current_dir().unwrap();
         println!("The current directory is {}", path.display());
@@ -1275,8 +1225,9 @@ impl CppGraphConverter {
             .with_node_limit(node_limit)
             .with_time_limit(time_limit_sec)
             .with_iter_limit(iter_limit)
-            .with_expr(&start)
-            .with_hook(move |runner| multi_patterns.run_one(runner));
+            .with_expr(&start);
+            // .with_hook(move |runner| multi_patterns.run_one(runner));
+
         let start_time = Instant::now();
         let mut runner = runner.run(&rules[..]);
         if do_filter_after {

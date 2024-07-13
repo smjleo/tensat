@@ -62,6 +62,7 @@ define_language! {
       "ScatterOp"          = ScatterOp([Id; 4]), // input, scatter_indices, updates, dimension_numbers
 
       "blackbox"           = BlackBox(Box<[Id]>),
+      "vec"                = Vec(Vec<Id>),
        Var(Symbol),
        Num(i32),
   }
@@ -115,7 +116,7 @@ impl Analysis<Mdl> for TensorAnalysis {
 
     /// Merges two metadata when two eclasses are merged.
     fn merge(&self, to: &mut Self::Data, from: Self::Data) -> bool {
-        true
+        false
     }
 
     fn make(egraph: &EGraph<Mdl, Self>, enode: &Mdl) -> Self::Data {
@@ -175,6 +176,7 @@ impl Analysis<Mdl> for TensorAnalysis {
             // Mdl::BlackBox_3([input1, input2, input3]) => Self::Data { val: 0, cost: 0 },
             // Mdl::BlackBox_4([input1, input2, input3, input4]) => Self::Data { val: 0, cost: 0 },
             // Mdl::BlackBox_5([input1, input2, input3, input4, input5]) => Self::Data { val: 0, cost: 0 },
+            Mdl::Vec(_) => Self::Data { val: 0, cost: 0 },
             _ => unimplemented!(),
         }
     }
