@@ -36,6 +36,16 @@ impl<'a> CostModel<'a> {
         }
     }
 
+    pub fn get_shape(&self, id: &Id) -> Vec<i64> {
+        self.tensorinfo_map
+            .get(id)
+            .unwrap()
+            .shape
+            .iter()
+            .map(|&x| x as i64)
+            .collect()
+    }
+
     /// Gets cost for the enode itself.
     ///
     /// This function gets the cost by calling TASO's get_or_create_{some_op}()
@@ -51,16 +61,6 @@ impl<'a> CostModel<'a> {
     /// # Returns
     ///
     /// Cost for this enode.
-    pub fn get_shape(&self, id: &Id) -> Vec<i64> {
-        self.tensorinfo_map
-            .get(id)
-            .unwrap()
-            .shape
-            .iter()
-            .map(|&x| x as i64)
-            .collect()
-    }
-
     pub fn get_self_cost(&self, egraph: &EGraph<Mdl, TensorAnalysis>, enode: &Mdl) -> f32 {
         let x = |i: &Id| &egraph[*i].data;
         match enode {
