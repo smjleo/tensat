@@ -1201,55 +1201,12 @@ impl CppGraphConverter {
         let do_filter_after = no_cycle && filter_after;
         let mut rules = rules_from_str(split_rules, do_filter_after);
 
-        // TODO: We should really separate these out into a separate util file + clean them.
-        // Just dirty hacks for now to test out conditional rewrites
-
-        fn get_vec(eclass: &EClass<Mdl, ValTnsr>) -> &Vec<Id> {
-            for node in eclass.iter() {
-                match node {
-                    Mdl::Vec(vec) => { return vec }
-                    _ => {}
-                }
-            }
-
-            panic!("no vec found");
-        }
-
-        fn get_num(eclass: &EClass<Mdl, ValTnsr>) -> &i32 {
-            for node in eclass.iter() {
-                match node {
-                    Mdl::Num(n) => { return n }
-                    _ => {}
-                }
-            }
-
-            panic!("no num found");
-        }
-
-        fn decreasing_perm(var: &'static str) -> impl Fn(&mut EGraph<Mdl, TensorAnalysis>, Id, &Subst) -> bool {
-            let var = var.parse().unwrap();
-            move |egraph, _, subst: &Subst| {
-                let eclass = &egraph[subst[var]];
-                let vec = get_vec(eclass);
-                let n = vec.len();
-                for i in 1..n {
-                    let prev = get_num(&egraph[vec[i-1]]);
-                    let cur = get_num(&egraph[vec[i]]);
-                    if prev < cur {
-                        return false
-                    }
-                }
-                return true
-            }
-        }
-        
         let mut conditional_rules: Vec<Rewrite<Mdl, TensorAnalysis>> = vec![
             rewrite!("transpose-of-transpose"; 
-                    "(TransposeOp (TransposeOp ?x ?p) ?p)" => "?x"
-                     if decreasing_perm("?p")),
-        ];
-
-        rules.append(&mut conditional_rules);
+                     "(TransposeOp (TransposeOp ?x ?p) ?p)" => "?x"
+                     if decreasing_perm("?p"))];
+                     
+        rules.append(&mut conditional_rules);   
 
         let iter_multi = 2;
         let node_multi = 30000;

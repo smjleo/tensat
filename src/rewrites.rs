@@ -140,6 +140,47 @@ pub static PRE_DEFINED_MULTI: &[&str] = &[
     */
 ];
 
+// TODO: We should really clean these. Just dirty hacks for now to test out conditional rewrites
+
+fn get_vec(eclass: &EClass<Mdl, ValTnsr>) -> &Vec<Id> {
+    for node in eclass.iter() {
+        match node {
+            Mdl::Vec(vec) => { return vec }
+            _ => {}
+        }
+    }
+
+    panic!("no vec found");
+}
+
+fn get_num(eclass: &EClass<Mdl, ValTnsr>) -> &i32 {
+    for node in eclass.iter() {
+        match node {
+            Mdl::Num(n) => { return n }
+            _ => {}
+        }
+    }
+
+    panic!("no num found");
+}
+
+pub fn decreasing_perm(var: &'static str) -> impl Fn(&mut EGraph<Mdl, TensorAnalysis>, Id, &Subst) -> bool {
+    let var = var.parse().unwrap();
+    move |egraph, _, subst: &Subst| {
+        let eclass = &egraph[subst[var]];
+        let vec = get_vec(eclass);
+        let n = vec.len();
+        for i in 1..n {
+            let prev = get_num(&egraph[vec[i-1]]);
+            let cur = get_num(&egraph[vec[i]]);
+            if prev < cur {
+                return false
+            }
+        }
+        return true
+    }
+}
+
 /// Struct for passing results in the recursive function check_pat
 ///
 /// Similar as ValTnsr for TensorAnalysis, but with tnsr being the object
