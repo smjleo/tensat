@@ -152,7 +152,7 @@ impl Analysis<Mdl> for TensorAnalysis {
             Mdl::ReshapeOp(_) => Self::Data { val: 0, cost: 10 },
             // Mdl::GatherOp([input, start_indices, dimension_numbers, cost]) => Self::Data { val: 0, cost: x(cost).val },
             // Mdl::SelectOp([pred, on_true, on_false, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            // Mdl::ConcatenateOp([inputs, dimension, cost]) => Self::Data { val: 0, cost: x(cost).val },
+            Mdl::ConcatenateOp([inputs, dimension]) => Self::Data { val: 0, cost: 0 },
             Mdl::DotGeneralOp(_) => Self::Data { val: 0, cost: 0 },
             // Mdl::PadOp([input, padding_value, padding_config, cost]) => Self::Data { val: 0, cost: x(cost).val },
             // Mdl::SliceOp([input, start_indices, limit_indices, strides, cost]) => Self::Data { val: 0, cost: x(cost).val },

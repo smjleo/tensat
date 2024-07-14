@@ -84,7 +84,7 @@ pub mod ffi {
             on_true: &TensorInfo,
             on_false: &TensorInfo,
         ) -> Box<TensorInfo>;
-        // fn new_concatenate_op(self: &mut CppGraphConverter, inputs: &[&TensorInfo], dimension: i32) -> Box<TensorInfo>;
+        fn new_concatenate_op(self: &mut CppGraphConverter, inputs: &[*mut TensorInfo], dimension: i32) -> Box<TensorInfo>;
         fn new_dot_general_op(
             self: &mut CppGraphConverter,
             lhs: &TensorInfo,
@@ -271,7 +271,7 @@ impl CppGraphConverter {
         id
     }
 
-    pub fn input(&mut self, block_arg_number: i32, dims: &[i32]) -> TensorInfo {
+    fn input(&mut self, block_arg_number: i32, dims: &[i32]) -> TensorInfo {
         let name = format!("input_{}", block_arg_number) + "@" + &dims.iter().join("_");
         let node = Mdl::Var(Symbol::from(name));
         let name_id = self.rec_expr.add(node);
@@ -287,7 +287,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn blackbox(&mut self, inpts: &[TensorInfo], cpp_num: i32) -> TensorInfo {
+    fn blackbox(&mut self, inpts: &[TensorInfo], cpp_num: i32) -> TensorInfo {
         let cpp_num_node = self.add_or_get_val(cpp_num);
         let mut ids: Vec<Id> = inpts.iter().map(|inpt| inpt.id).collect();
         ids.push(cpp_num_node);
@@ -394,7 +394,7 @@ impl CppGraphConverter {
     //     res
     // }
 
-    pub fn compare_op(
+    fn compare_op(
         &mut self,
         inpt_1: TensorInfo,
         inpt_2: TensorInfo,
@@ -418,7 +418,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn broadcast_in_dim(&mut self, inpt: TensorInfo, dimensions: &[i32]) -> TensorInfo {
+    fn broadcast_in_dim(&mut self, inpt: TensorInfo, dimensions: &[i32]) -> TensorInfo {
         let dimensions_id = self.vec_node(dimensions);
         let new_node = Mdl::BroadcastInDimOp([inpt.id, dimensions_id]);
         let res = TensorInfo {
@@ -431,7 +431,7 @@ impl CppGraphConverter {
     }
 
     // Weird calling convention: the result type is specified with a type annotation, and is NOT a parameter
-    pub fn convert_op(&mut self, inpt: TensorInfo, output_type: i32) -> TensorInfo {
+    fn convert_op(&mut self, inpt: TensorInfo, output_type: i32) -> TensorInfo {
         let output_type_node = self.add_or_get_val(output_type);
         let new_node = Mdl::ConvertOp([inpt.id, output_type_node]);
         let res = TensorInfo {
@@ -444,7 +444,7 @@ impl CppGraphConverter {
     }
 
     // needs to take in a variadic number of input tensors
-    pub fn reduce_op(&mut self, inpt: TensorInfo, dimensions: &[i32]) -> TensorInfo {
+    fn reduce_op(&mut self, inpt: TensorInfo, dimensions: &[i32]) -> TensorInfo {
         let dimensions_id = self.vec_node(dimensions);
         let new_node = Mdl::ReduceOp([inpt.id, dimensions_id]);
         let res = TensorInfo {
@@ -456,7 +456,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn reshape_op(&mut self, inpt: TensorInfo, shape: &[i32]) -> TensorInfo {
+    fn reshape_op(&mut self, inpt: TensorInfo, shape: &[i32]) -> TensorInfo {
         let shape_id = self.vec_node(shape);
         let new_node = Mdl::ReshapeOp([inpt.id, shape_id]);
         let (shape_new, n_dim) = self.shape_from_dim(shape);
@@ -471,7 +471,7 @@ impl CppGraphConverter {
 
     // https://github.com/openxla/stablehlo/blob/main/docs/spec.md#inputs-44
     // Lots of inputs, we might want to investigate posisble rewrites and based on that decide how to implement this
-    pub fn gather_op(
+    fn gather_op(
         &mut self,
         inpt: TensorInfo,
         start_indices: TensorInfo,
@@ -533,23 +533,30 @@ impl CppGraphConverter {
         self.tensorinfo_map.insert(res.id, res);
         res
     }
-    // pub fn concatenate_op(&mut self, inputs: &[TensorInfo], dimension: i32, cost: i32) -> TensorInfo {
-    //   let n_inputs = inputs.len();
-    //   assert!(n_inputs > 0);
-    //   let dimension_id = &[self.add_or_get_val(dimension)];
-    //   let cost_id = &[self.add_or_get_val(cost)];
-    //   let input_ids: Vec<Id> = inputs.iter().map(|x| x.id).collect();
-    //   let new_node = Mdl::ConcatenateOp([input_ids, dimension_id, cost_id]);
-    //   let mut shape = inputs[0].shape;
-    //   shape[dimension as usize] = inputs.iter().map(|x| x.shape[dimension as usize]).sum();
-    //   TensorInfo {
-    //     id: self.rec_expr.add(new_node),
-    //     shape,
-    //     n_dim: inputs[0].n_dim,
-    //   }
-    // }
 
-    pub fn select_op(
+    fn concatenate_op(
+        &mut self,
+        inputs: &[TensorInfo],
+        dimension: i32
+    ) -> TensorInfo {
+        let dimension_id = self.add_or_get_val(dimension);
+        let inputs_node = Mdl::Vec(
+            inputs.iter().map(|i| i.id ).collect()
+        );
+        let inputs_id = self.rec_expr.add(inputs_node);
+        let dimension_id = self.add_or_get_val(dimension);
+        let new_node = Mdl::ConcatenateOp([inputs_id, dimension_id]);
+
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            shape: inputs[0].shape,  // FIXME: these are wrong - fix with proper shape inference
+            n_dim: inputs[0].n_dim,
+        };
+        self.tensorinfo_map.insert(res.id, res);
+        res
+    }
+
+    fn select_op(
         &mut self,
         pred: TensorInfo,
         on_true: TensorInfo,
@@ -565,7 +572,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn dot_general_op(
+    fn dot_general_op(
         &mut self,
         lhs: TensorInfo,
         rhs: TensorInfo,
@@ -654,7 +661,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn slice_op(
+    fn slice_op(
         &mut self,
         inpt: TensorInfo,
         start_indices: &[i32],
@@ -674,7 +681,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn transpose_op(&mut self, inpt: TensorInfo, permutation: &[i32]) -> TensorInfo {
+    fn transpose_op(&mut self, inpt: TensorInfo, permutation: &[i32]) -> TensorInfo {
         let permutation_id = self.vec_node(permutation);
         let new_node = Mdl::TransposeOp([inpt.id, permutation_id]);
         let mut shape = [0; MAX_DIM];
@@ -691,7 +698,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn mul_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
+    fn mul_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
         let new_node = Mdl::MulOp([lhs.id, rhs.id]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -702,7 +709,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn add_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
+    fn add_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
         let new_node = Mdl::AddOp([lhs.id, rhs.id]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -713,7 +720,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn div_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
+    fn div_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
         let new_node = Mdl::DivOp([lhs.id, rhs.id]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -724,7 +731,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn subtract_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
+    fn subtract_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
         let new_node = Mdl::SubtractOp([lhs.id, rhs.id]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -735,7 +742,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn min_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
+    fn min_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
         let new_node = Mdl::MinOp([lhs.id, rhs.id]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -746,7 +753,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn max_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
+    fn max_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
         let new_node = Mdl::MaxOp([lhs.id, rhs.id]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -757,7 +764,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn neg_op(&mut self, inpt: TensorInfo) -> TensorInfo {
+    fn neg_op(&mut self, inpt: TensorInfo) -> TensorInfo {
         let new_node = Mdl::NegOp([inpt.id]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -768,7 +775,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn tanh_op(&mut self, inpt: TensorInfo) -> TensorInfo {
+    fn tanh_op(&mut self, inpt: TensorInfo) -> TensorInfo {
         let new_node = Mdl::TanhOp([inpt.id]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -779,7 +786,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn exp_op(&mut self, inpt: TensorInfo) -> TensorInfo {
+    fn exp_op(&mut self, inpt: TensorInfo) -> TensorInfo {
         let new_node = Mdl::ExpOp([inpt.id]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -790,7 +797,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn iota_op(&mut self, iota_dimension: i32, shape: &[i32]) -> TensorInfo {
+    fn iota_op(&mut self, iota_dimension: i32, shape: &[i32]) -> TensorInfo {
         let iota_dim_id = self.add_or_get_val(iota_dimension);
         let shape_id = self.vec_node(shape);
         let new_node = Mdl::IotaOp([iota_dim_id, shape_id]);
@@ -804,7 +811,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn constant_op(&mut self) -> TensorInfo {
+    fn constant_op(&mut self) -> TensorInfo {
         let new_node = Mdl::ConstantOp([]);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -815,7 +822,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn dynamic_update_slice_op(
+    fn dynamic_update_slice_op(
         &mut self,
         operand: TensorInfo,
         update: TensorInfo,
@@ -831,7 +838,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn dynamic_slice_op(
+    fn dynamic_slice_op(
         &mut self,
         operand: TensorInfo,
         start_indices: TensorInfo,
@@ -848,7 +855,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn scatter_op(
+    fn scatter_op(
         &mut self,
         inpt: TensorInfo,
         scatter_indices: TensorInfo,
@@ -965,10 +972,10 @@ impl CppGraphConverter {
         Box::new(self.select_op(*pred, *on_true, *on_false))
     }
 
-    // pub fn new_concatenate_op(&mut self, inputs: &[&TensorInfo], dimension: i32, cost: i32) -> Box<TensorInfo> {
-    //     let unboxed_inputs: Vec<TensorInfo> = inputs.iter().map(|x| **x).collect();
-    //     Box::new(self.concatenate_op(&unboxed_inputs, dimension, cost))
-    // }
+    pub fn new_concatenate_op(&mut self, inputs: &[*mut TensorInfo], dimension: i32) -> Box<TensorInfo> {
+        let tensor_infos: Vec<TensorInfo> = inputs.iter().map(|&ptr| unsafe { *ptr }).collect();
+        Box::new(self.concatenate_op(&tensor_infos, dimension))
+    }
 
     pub fn new_dot_general_op(
         self: &mut CppGraphConverter,
@@ -1157,6 +1164,7 @@ impl CppGraphConverter {
                 Mdl::Input(ops) => new_node("Input", ops),
                 Mdl::ConstantOp(ops) => new_node("ConstantOp", ops),
                 Mdl::ReshapeOp(ops) => new_node("ReshapeOp", ops),
+                Mdl::ConcatenateOp(ops) => new_node("ConcatenateOp", ops),
                 Mdl::DotGeneralOp(ops) => new_node("DotGeneralOp", ops),
                 Mdl::TransposeOp(ops) => new_node("TransposeOp", ops),
                 Mdl::MulOp(ops) => new_node("MulOp", ops),
