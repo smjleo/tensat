@@ -1122,11 +1122,7 @@ impl CppGraphConverter {
         println!("{}", self.rec_expr.pretty(width as usize))
     }
 
-    pub fn get_rec_expr_as_ref(&self) -> &[Mdl] {
-        return &self.rec_expr.as_ref();
-    }
-
-    fn convert_to_node(&self) -> Vec<ffi::Node> {
+    fn convert_to_node(&self, rec_expr: RecExpr<Mdl>) -> Vec<ffi::Node> {
         let mut res: Vec<ffi::Node> = Vec::new();
 
         let index = |id: Id| (usize::from(id) as i32); // TODO: this is probably wrong
@@ -1142,7 +1138,7 @@ impl CppGraphConverter {
             operands: convert(operands),
         };
 
-        let rec_expr_ref = self.get_rec_expr_as_ref();
+        let rec_expr_ref = rec_expr.as_ref();
 
         for mdl in rec_expr_ref.iter() {
             let node = match mdl {
@@ -1208,9 +1204,6 @@ impl CppGraphConverter {
         // TODO: We should really separate these out into a separate util file + clean them.
         // Just dirty hacks for now to test out conditional rewrites
 
-        // TODO: Turns out this creates a self-loop in [construct_best_rec] so programs with two adjacent transposes
-        // will die. But it demonstrates that the conditonal rule works!
-
         fn get_vec(eclass: &EClass<Mdl, ValTnsr>) -> &Vec<Id> {
             for node in eclass.iter() {
                 match node {
@@ -1252,7 +1245,7 @@ impl CppGraphConverter {
         
         let mut conditional_rules: Vec<Rewrite<Mdl, TensorAnalysis>> = vec![
             rewrite!("transpose-of-transpose"; 
-                    "(TransposeOp (TransposeOp ?x ?p) ?p)" => "?p"
+                    "(TransposeOp (TransposeOp ?x ?p) ?p)" => "?x"
                      if decreasing_perm("?p")),
         ];
 
@@ -1308,7 +1301,7 @@ impl CppGraphConverter {
         let (best, ext_secs) = extract_by_ilp(&egraph, root, &cost_model);
         println!("{}", best);
 
-        self.convert_to_node()
+        self.convert_to_node(best)
     }
 }
 
