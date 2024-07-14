@@ -155,7 +155,7 @@ impl Analysis<Mdl> for TensorAnalysis {
             Mdl::ConcatenateOp([inputs, dimension]) => Self::Data { val: 0, cost: 0 },
             Mdl::DotGeneralOp(_) => Self::Data { val: 0, cost: 0 },
             // Mdl::PadOp([input, padding_value, padding_config, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            // Mdl::SliceOp([input, start_indices, limit_indices, strides, cost]) => Self::Data { val: 0, cost: x(cost).val },
+            Mdl::SliceOp([input, start_indices, limit_indices, strides]) => Self::Data { val: 0, cost: 0 },
             Mdl::TransposeOp(_) => Self::Data { val: 0, cost: 0 },
             // Mdl::MulOp([lhs, rhs, cost]) => Self::Data { val: 0, cost: x(cost).val },
             // Mdl::AddOp([lhs, rhs, cost]) => Self::Data { val: 0, cost: x(cost).val },

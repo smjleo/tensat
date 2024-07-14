@@ -1166,6 +1166,7 @@ impl CppGraphConverter {
                 Mdl::ReshapeOp(ops) => new_node("ReshapeOp", ops),
                 Mdl::ConcatenateOp(ops) => new_node("ConcatenateOp", ops),
                 Mdl::DotGeneralOp(ops) => new_node("DotGeneralOp", ops),
+                Mdl::SliceOp(ops) => new_node("SliceOp", ops),
                 Mdl::TransposeOp(ops) => new_node("TransposeOp", ops),
                 Mdl::MulOp(ops) => new_node("MulOp", ops),
                 Mdl::AddOp(ops) => new_node("AddOp", ops),
