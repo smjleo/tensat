@@ -61,8 +61,8 @@ define_language! {
       // Complete pain, has arity 12
       "ScatterOp"          = ScatterOp([Id; 4]), // input, scatter_indices, updates, dimension_numbers
 
-      "blackbox"           = BlackBox(Box<[Id]>),
-      "vec"                = Vec(Vec<Id>),
+      "BlackBox"           = BlackBox(Box<[Id]>),
+      "Vec"                = Vec(Vec<Id>),
        Var(Symbol),
        Num(i32),
   }

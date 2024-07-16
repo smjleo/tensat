@@ -138,6 +138,7 @@ impl<'a> CostModel<'a> {
             Mdl::DynamicUpdateSliceOp([operand, update, start_indices]) => 0.0,
             Mdl::DynamicSliceOp([operand, start_indices, slice_sizes]) => 0.0,
             Mdl::ScatterOp([input, scatter_indices, updates, dimension_numbers]) => 0.0,
+            Mdl::ConcatenateOp([inputs, dimension]) => 10.0,
             _ => 0.0,
         }
     }

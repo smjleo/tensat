@@ -181,6 +181,57 @@ pub fn decreasing_perm(var: &'static str) -> impl Fn(&mut EGraph<Mdl, TensorAnal
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FlattenConcat {
+    pub vec: Var,
+    pub dim: Var,
+}
+
+impl Applier<Mdl, TensorAnalysis> for FlattenConcat {
+    fn apply_one(
+        &self,
+        egraph: &mut EGraph<Mdl, TensorAnalysis>,
+        matched_id: Id,
+        subst: &Subst,
+    ) -> Vec<Id> {
+        let vec = get_vec(&egraph[subst[self.vec]]);
+        let dim = get_num(&egraph[subst[self.dim]]);
+
+        // Go through elements in vec, and see if there is another concat with the same dimension.
+        // If so we can flatten it.
+        let mut new_vec: Vec<Id> = vec![];
+
+        'outer: for i in vec.iter() {
+            for node in egraph[*i].iter() {
+                match node {
+                    Mdl::ConcatenateOp(c) => {
+                        let inp = c[0];
+                        let d = get_num(&egraph[c[1]]);
+
+                        if dim != d {
+                            continue;
+                        }
+                        // We can merge this one in
+                        let children = get_vec(&egraph[inp]);
+                        for c in children.iter() {
+                            new_vec.push(*c);
+                        }
+                        continue 'outer;
+                    },
+                    _ => {}
+                }
+            }
+
+            // No concat found
+            new_vec.push(*i);
+        }
+        let dim_id = egraph.add(Mdl::Num(*dim));
+        let vec_id = egraph.add(Mdl::Vec((*new_vec).to_vec()));
+        let id = egraph.add(Mdl::ConcatenateOp([vec_id, dim_id]));
+        vec![id]
+    }
+}
+
 /// Struct for passing results in the recursive function check_pat
 ///
 /// Similar as ValTnsr for TensorAnalysis, but with tnsr being the object

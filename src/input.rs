@@ -1210,12 +1210,19 @@ impl CppGraphConverter {
         let do_filter_after = no_cycle && filter_after;
         let mut rules = rules_from_str(split_rules, do_filter_after);
 
-        let mut conditional_rules: Vec<Rewrite<Mdl, TensorAnalysis>> = vec![
+        let mut custom_rules: Vec<Rewrite<Mdl, TensorAnalysis>> = vec![
             rewrite!("transpose-of-transpose"; 
                      "(TransposeOp (TransposeOp ?x ?p) ?p)" => "?x"
-                     if decreasing_perm("?p"))];
+                     if decreasing_perm("?p")),
                      
-        rules.append(&mut conditional_rules);   
+            rewrite!("flatten-concat";
+                     "(ConcatenateOp ?v ?d)" => { FlattenConcat {
+                vec: "?v".parse().unwrap(),
+                dim: "?d".parse().unwrap(),
+            }}),
+        ];
+                     
+        rules.append(&mut custom_rules);   
 
         let iter_multi = 2;
         let node_multi = 30000;
