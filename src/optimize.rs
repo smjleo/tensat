@@ -86,7 +86,7 @@ impl<'a> CostModel<'a> {
             Mdl::PadOp(
                 [input, padding_value, edge_padding_low, edge_padding_high, interior_padding],
             ) => 0.0,
-            Mdl::SliceOp([input, start_indices, limit_indices, strides]) => 0.0,
+            Mdl::SliceOp([input, start_indices, limit_indices, strides]) => 5.0,
             Mdl::TransposeOp([input, permutation]) => 3.0,
             Mdl::MulOp([lhs, rhs]) => {
                 let lhs_dims = self.get_shape(lhs);

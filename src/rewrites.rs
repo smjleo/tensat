@@ -164,6 +164,14 @@ fn get_num(eclass: &EClass<Mdl, ValTnsr>) -> &i32 {
     panic!("no num found");
 }
 
+fn make_num(egraph: &mut EGraph<Mdl, TensorAnalysis>, num: i32) -> Id {
+    egraph.add(Mdl::Num(num))
+}
+
+fn make_vec(egraph: &mut EGraph<Mdl, TensorAnalysis>, seq: &[Id]) -> Id {
+    egraph.add(Mdl::Vec((*seq).to_vec()))
+}
+
 pub fn decreasing_perm(var: &'static str) -> impl Fn(&mut EGraph<Mdl, TensorAnalysis>, Id, &Subst) -> bool {
     let var = var.parse().unwrap();
     move |egraph, _, subst: &Subst| {
@@ -181,6 +189,14 @@ pub fn decreasing_perm(var: &'static str) -> impl Fn(&mut EGraph<Mdl, TensorAnal
     }
 }
 
+fn finish_apply(egraph: &mut EGraph<Mdl, TensorAnalysis>, matched_id: Id, new_id: Id) -> Vec<Id> {
+    if egraph.union(matched_id, new_id).1 {
+        vec![new_id]
+    } else {
+        vec![]
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FlattenConcat {
     pub vec: Var,
@@ -195,7 +211,7 @@ impl Applier<Mdl, TensorAnalysis> for FlattenConcat {
         subst: &Subst,
     ) -> Vec<Id> {
         let vec = get_vec(&egraph[subst[self.vec]]);
-        let dim = get_num(&egraph[subst[self.dim]]);
+        let dim = *get_num(&egraph[subst[self.dim]]);
 
         // Go through elements in vec, and see if there is another concat with the same dimension.
         // If so we can flatten it.
@@ -206,7 +222,7 @@ impl Applier<Mdl, TensorAnalysis> for FlattenConcat {
                 match node {
                     Mdl::ConcatenateOp(c) => {
                         let inp = c[0];
-                        let d = get_num(&egraph[c[1]]);
+                        let d = *get_num(&egraph[c[1]]);
 
                         if dim != d {
                             continue;
@@ -225,10 +241,90 @@ impl Applier<Mdl, TensorAnalysis> for FlattenConcat {
             // No concat found
             new_vec.push(*i);
         }
-        let dim_id = egraph.add(Mdl::Num(*dim));
-        let vec_id = egraph.add(Mdl::Vec((*new_vec).to_vec()));
+        let dim_id = make_num(egraph, dim);
+        let vec_id = make_vec(egraph, &new_vec);
         let id = egraph.add(Mdl::ConcatenateOp([vec_id, dim_id]));
-        vec![id]
+
+        finish_apply(egraph, matched_id, id)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeSlices {
+    pub x: Var,
+    pub s1: Var,
+    pub s2: Var,
+    pub l1: Var,
+    pub l2: Var, 
+    pub strides: Var,
+    pub dim: Var,
+}
+
+impl Applier<Mdl, TensorAnalysis> for MergeSlices {
+    fn apply_one(
+        &self,
+        egraph: &mut EGraph<Mdl, TensorAnalysis>,
+        matched_id: Id,
+        subst: &Subst,
+    ) -> Vec<Id> {
+        let x = subst[self.x];
+        let starting_1 = get_vec(&egraph[subst[self.s1]]);
+        let starting_2 = get_vec(&egraph[subst[self.s2]]);
+        let limiting_1 = get_vec(&egraph[subst[self.l1]]);
+        let limiting_2 = get_vec(&egraph[subst[self.l2]]);
+        let strides_id = subst[self.strides];
+        let strides = get_vec(&egraph[strides_id]);
+        let dim = *get_num(&egraph[subst[self.dim]]);
+
+        assert!(starting_1.len() == starting_2.len());
+        assert!(limiting_1.len() == limiting_2.len());
+        assert!(starting_1.len() == limiting_1.len());
+
+        let n = starting_1.len();
+        // Concat(Split(A), Split(A)) => Split(A)
+        // For every dimension not equal to the concat dim, the starting and
+        // limiting indices should be the same. The concat dim, we need to do
+        // a bit of maths to ensure they are "contiguous" wrt the stride.
+
+        let mut new_starting: Vec<i32> = vec![];
+        let mut new_limiting: Vec<i32> = vec![];
+
+        for i in 0..n {
+            let s1 = *get_num(&egraph[starting_1[i]]);
+            let s2 = *get_num(&egraph[starting_2[i]]);
+            let l1 = *get_num(&egraph[limiting_1[i]]);
+            let l2 = *get_num(&egraph[limiting_2[i]]);
+            let stride = *get_num(&egraph[strides[i]]);
+
+            if i != (dim as usize) {
+                if s1 != s2 || l1 != l2 { return vec![] }
+                new_starting.push(s1);
+                new_limiting.push(l1);
+            } else {
+                if s2 > l1 { return vec![] }    // should be non-overlapping
+
+                // Check the next unchosen index for the first slice. This should be s2
+                // For example, if stride = 3, s1 = 1, l1 = 5:
+                // 1 2 3 4 5 6 7 8 9
+                // x     x    [x]
+                // So s2 = 7 for the two slices to be contiguous.
+
+                let numbers_picked = (l1 - s1) / stride + i32::from((l1 - s1) % stride != 0);   // ceil
+                let next_unchosen_index = s1 + numbers_picked * stride;
+                if next_unchosen_index != s2 {
+                    return vec![]
+                }
+                new_starting.push(s1);
+                new_limiting.push(l2);
+            }
+        }
+
+        let new_starting_ids: Vec<Id> = new_starting.iter().map(|x| make_num(egraph, *x)).collect();
+        let new_limiting_ids: Vec<Id> = new_limiting.iter().map(|x| make_num(egraph, *x)).collect();
+        let node = Mdl::SliceOp([x, make_vec(egraph, &new_starting_ids), make_vec(egraph, &new_limiting_ids), strides_id]);
+        let id = egraph.add(node);
+        
+        finish_apply(egraph, matched_id, id)
     }
 }
 

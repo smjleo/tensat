@@ -1220,6 +1220,17 @@ impl CppGraphConverter {
                 vec: "?v".parse().unwrap(),
                 dim: "?d".parse().unwrap(),
             }}),
+
+            rewrite!("merge-slices";
+                     "(ConcatenateOp (Vec (SliceOp ?x ?s1 ?l1 ?s) (SliceOp ?x ?s2 ?l2 ?s)) ?d)" => { MergeSlices {
+                x: "?x".parse().unwrap(),
+                s1: "?s1".parse().unwrap(),
+                s2: "?s2".parse().unwrap(),
+                l1: "?l1".parse().unwrap(),
+                l2: "?l2".parse().unwrap(),
+                strides: "?s".parse().unwrap(),
+                dim: "?d".parse().unwrap()
+            }}),
         ];
                      
         rules.append(&mut custom_rules);   
