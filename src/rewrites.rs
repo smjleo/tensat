@@ -189,6 +189,28 @@ pub fn decreasing_perm(var: &'static str) -> impl Fn(&mut EGraph<Mdl, TensorAnal
     }
 }
 
+pub fn concat_dot_compatible(lc: &'static str, d1: &'static str, rc: &'static str, d2: &'static str) ->
+        impl Fn(&mut EGraph<Mdl, TensorAnalysis>, Id, &Subst) -> bool { 
+    // The dot_general of two concats should be able to be reduced into an add of two (smaller) dot_generals
+    // if the dimension of each concat is included in the corresponding contract dims.
+    // TODO: I'm not confident this always holds - seemed to work for smaller examples but there might
+    // be a case I'm missing.
+    
+    let lc = lc.parse().unwrap();
+    let d1 = d1.parse().unwrap();
+    let rc = rc.parse().unwrap();
+    let d2 = d2.parse().unwrap();
+
+    move |egraph, _, subst| {
+        let lc = get_vec(&egraph[subst[lc]]);
+        let d1 = &subst[d1];
+        let rc = get_vec(&egraph[subst[rc]]);
+        let d2 = &subst[d2];
+
+        lc.contains(d1) && rc.contains(d2)
+    }
+}
+
 fn finish_apply(egraph: &mut EGraph<Mdl, TensorAnalysis>, matched_id: Id, new_id: Id) -> Vec<Id> {
     if egraph.union(matched_id, new_id).1 {
         vec![new_id]
