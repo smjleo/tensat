@@ -142,10 +142,10 @@ pub static PRE_DEFINED_MULTI: &[&str] = &[
 
 // TODO: We should really clean these. Just dirty hacks for now to test out conditional rewrites
 
-fn get_vec(eclass: &EClass<Mdl, ValTnsr>) -> &Vec<Id> {
+fn get_vec(eclass: &EClass<Mdl, TensorData>) -> &Vec<Id> {
     for node in eclass.iter() {
         match node {
-            Mdl::Vec(vec) => { return vec }
+            Mdl::Vec(vec) => return vec,
             _ => {}
         }
     }
@@ -153,10 +153,10 @@ fn get_vec(eclass: &EClass<Mdl, ValTnsr>) -> &Vec<Id> {
     panic!("no vec found");
 }
 
-fn get_num(eclass: &EClass<Mdl, ValTnsr>) -> &i32 {
+fn get_num(eclass: &EClass<Mdl, TensorData>) -> &i32 {
     for node in eclass.iter() {
         match node {
-            Mdl::Num(n) => { return n }
+            Mdl::Num(n) => return n,
             _ => {}
         }
     }
@@ -172,42 +172,22 @@ fn make_vec(egraph: &mut EGraph<Mdl, TensorAnalysis>, seq: &[Id]) -> Id {
     egraph.add(Mdl::Vec((*seq).to_vec()))
 }
 
-pub fn decreasing_perm(var: &'static str) -> impl Fn(&mut EGraph<Mdl, TensorAnalysis>, Id, &Subst) -> bool {
+pub fn decreasing_perm(
+    var: &'static str,
+) -> impl Fn(&mut EGraph<Mdl, TensorAnalysis>, Id, &Subst) -> bool {
     let var = var.parse().unwrap();
     move |egraph, _, subst: &Subst| {
         let eclass = &egraph[subst[var]];
         let vec = get_vec(eclass);
         let n = vec.len();
         for i in 1..n {
-            let prev = get_num(&egraph[vec[i-1]]);
+            let prev = get_num(&egraph[vec[i - 1]]);
             let cur = get_num(&egraph[vec[i]]);
             if prev < cur {
-                return false
+                return false;
             }
         }
-        return true
-    }
-}
-
-pub fn concat_dot_compatible(lc: &'static str, d1: &'static str, rc: &'static str, d2: &'static str) ->
-        impl Fn(&mut EGraph<Mdl, TensorAnalysis>, Id, &Subst) -> bool { 
-    // The dot_general of two concats should be able to be reduced into an add of two (smaller) dot_generals
-    // if the dimension of each concat is included in the corresponding contract dims.
-    // TODO: I'm not confident this always holds - seemed to work for smaller examples but there might
-    // be a case I'm missing.
-    
-    let lc = lc.parse().unwrap();
-    let d1 = d1.parse().unwrap();
-    let rc = rc.parse().unwrap();
-    let d2 = d2.parse().unwrap();
-
-    move |egraph, _, subst| {
-        let lc = get_vec(&egraph[subst[lc]]);
-        let d1 = &subst[d1];
-        let rc = get_vec(&egraph[subst[rc]]);
-        let d2 = &subst[d2];
-
-        lc.contains(d1) && rc.contains(d2)
+        return true;
     }
 }
 
@@ -255,7 +235,7 @@ impl Applier<Mdl, TensorAnalysis> for FlattenConcat {
                             new_vec.push(*c);
                         }
                         continue 'outer;
-                    },
+                    }
                     _ => {}
                 }
             }
@@ -277,7 +257,7 @@ pub struct MergeSlices {
     pub s1: Var,
     pub s2: Var,
     pub l1: Var,
-    pub l2: Var, 
+    pub l2: Var,
     pub strides: Var,
     pub dim: Var,
 }
@@ -319,11 +299,15 @@ impl Applier<Mdl, TensorAnalysis> for MergeSlices {
             let stride = *get_num(&egraph[strides[i]]);
 
             if i != (dim as usize) {
-                if s1 != s2 || l1 != l2 { return vec![] }
+                if s1 != s2 || l1 != l2 {
+                    return vec![];
+                }
                 new_starting.push(s1);
                 new_limiting.push(l1);
             } else {
-                if s2 > l1 { return vec![] }    // should be non-overlapping
+                if s2 > l1 {
+                    return vec![];
+                } // should be non-overlapping
 
                 // Check the next unchosen index for the first slice. This should be s2
                 // For example, if stride = 3, s1 = 1, l1 = 5:
@@ -331,10 +315,10 @@ impl Applier<Mdl, TensorAnalysis> for MergeSlices {
                 // x     x    [x]
                 // So s2 = 7 for the two slices to be contiguous.
 
-                let numbers_picked = (l1 - s1) / stride + i32::from((l1 - s1) % stride != 0);   // ceil
+                let numbers_picked = (l1 - s1) / stride + i32::from((l1 - s1) % stride != 0); // ceil
                 let next_unchosen_index = s1 + numbers_picked * stride;
                 if next_unchosen_index != s2 {
-                    return vec![]
+                    return vec![];
                 }
                 new_starting.push(s1);
                 new_limiting.push(l2);
@@ -343,37 +327,17 @@ impl Applier<Mdl, TensorAnalysis> for MergeSlices {
 
         let new_starting_ids: Vec<Id> = new_starting.iter().map(|x| make_num(egraph, *x)).collect();
         let new_limiting_ids: Vec<Id> = new_limiting.iter().map(|x| make_num(egraph, *x)).collect();
-        let node = Mdl::SliceOp([x, make_vec(egraph, &new_starting_ids), make_vec(egraph, &new_limiting_ids), strides_id]);
+        let node = Mdl::SliceOp([
+            x,
+            make_vec(egraph, &new_starting_ids),
+            make_vec(egraph, &new_limiting_ids),
+            strides_id,
+        ]);
         let id = egraph.add(node);
-        
+
         finish_apply(egraph, matched_id, id)
     }
 }
-
-/// Struct for passing results in the recursive function check_pat
-///
-/// Similar as ValTnsr for TensorAnalysis, but with tnsr being the object
-/// rather than pointer, to make memory working correctly with recursive
-/// function.
-struct TData {
-    pub dtype: DataKind,
-    pub val: i32,
-}
-
-impl Default for TData {
-    fn default() -> Self {
-        TData {
-            val: Default::default(),
-            dtype: Default::default(),
-        }
-    }
-}
-
-// impl PartialEq for Op {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.guid == other.guid && self.ptr == other.ptr
-//     }
-// }
 
 /// Custom struct implementing the Applier trait, checking the new nodes to
 /// construct are all valid before actually apply.
@@ -404,12 +368,8 @@ impl Applier<Mdl, TensorAnalysis> for CheckApply {
                 return vec![];
             }
         }
-        let (valid, _, existing) = check_pat(
-            self.pat.ast.as_ref(),
-            egraph,
-            subst,
-            self.filter_after,
-        );
+        let (valid, _, existing) =
+            check_pat(self.pat.ast.as_ref(), egraph, subst, self.filter_after);
         if valid {
             let result = self.pat.apply_one(egraph, matched_id, subst);
 
@@ -503,12 +463,12 @@ fn contains_blacklist(
 ///
 /// # Returns
 ///
-/// A tuple of (bool, Option<Id>, TData) where
+/// A tuple of (bool, Option<Id>, TensorData) where
 ///
 /// - bool: true if the nodes in this pattern are all valid
 /// - Option<Id>: if the root node of this pattern (pat.last()) is in egraph,
 ///     then it is the Id of that eclass. Otherwise None
-/// - TData: The TData for the root node of this pattern. This is read from
+/// - TensorData: The TensorData for the root node of this pattern. This is read from
 ///     egraph if the root node is in egraph, otherwise constructed by calling
 ///     TASO functions.
 /// - Option<HashSet<Mdl>>: if get_exist_nodes is true, this returns the set of
@@ -590,7 +550,7 @@ fn check_pat(
                     }
                 }
                 let result = match e {
-                    _ => (true, None)
+                    _ => (true, None),
                 };
                 if get_exist_nodes && result.0 {
                     let mut existing_nodes = HashSet::<Mdl>::new();
@@ -770,7 +730,8 @@ impl MultiPatterns {
                                 // We don't want to apply multi-pattern rules on the same eclass
                                 continue;
                             }
-                            let n_applied = self.apply_match_pair(rule, match_1, match_2, map_1, map_2, runner);
+                            let n_applied =
+                                self.apply_match_pair(rule, match_1, match_2, map_1, map_2, runner);
                             //num_applied += n_applied;
                             //let num_nodes = runner.egraph.analysis.newly_added.len();
                             //if num_nodes - starting_num_nodes > self.node_limit {
@@ -790,7 +751,8 @@ impl MultiPatterns {
                                 // We don't want to apply multi-pattern rules on the same eclass
                                 continue;
                             }
-                            let n_applied = self.apply_match_pair(rule, match_1, match_2, map_1, map_2, runner);
+                            let n_applied =
+                                self.apply_match_pair(rule, match_1, match_2, map_1, map_2, runner);
                             //num_applied += n_applied;
                             //let num_nodes = runner.egraph.analysis.newly_added.len();
                             //if num_nodes - starting_num_nodes > self.node_limit {
@@ -818,7 +780,10 @@ impl MultiPatterns {
             } else {
                 self.node_limit - (ending_num_nodes - starting_num_nodes)
             };
-            println!("Number of nodes added: {}", ending_num_nodes - starting_num_nodes);
+            println!(
+                "Number of nodes added: {}",
+                ending_num_nodes - starting_num_nodes
+            );
 
             let time_taken = start_time.elapsed().as_secs();
             self.n_sec = if time_taken > self.n_sec {
@@ -1165,7 +1130,7 @@ fn get_cycles(
     cycles: &mut Vec<Vec<Mdl>>,
 ) {
     // Get a map from Id to the eclass objects, since egg doesn't provide accessing eclass from Id
-    let id_to_class: HashMap<Id, &EClass<Mdl, ValTnsr>> =
+    let id_to_class: HashMap<Id, &EClass<Mdl, TensorData>> =
         egraph.classes().map(|class| (class.id, class)).collect();
 
     get_cycles_rec(
@@ -1193,7 +1158,7 @@ fn get_cycles_rec(
     egraph: &EGraph<Mdl, TensorAnalysis>,
     eclass: Id,
     path_to_here: Vec<(Id, Mdl)>,
-    id_to_class: &HashMap<Id, &EClass<Mdl, ValTnsr>>,
+    id_to_class: &HashMap<Id, &EClass<Mdl, TensorData>>,
     visited: &mut HashSet<Id>,
     cycles: &mut Vec<Vec<Mdl>>,
 ) {
@@ -1271,7 +1236,7 @@ fn check_cycle(
         .map(|(var, _)| *input_subst.get(*var).unwrap())
         .collect();
     // Get a map from eclass IDs to eclass
-    let id_to_class: HashMap<Id, &EClass<Mdl, ValTnsr>> =
+    let id_to_class: HashMap<Id, &EClass<Mdl, TensorData>> =
         egraph.classes().map(|class| (class.id, class)).collect();
     // Check descendents of the input eclasses
     return input_ids.iter().all(|id| {
@@ -1305,7 +1270,7 @@ fn compute_all_descendents(
     check_blacklist: bool,
 ) -> HashMap<Id, HashSet<Id>> {
     // Get a map from eclass IDs to eclass
-    let id_to_class: HashMap<Id, &EClass<Mdl, ValTnsr>> =
+    let id_to_class: HashMap<Id, &EClass<Mdl, TensorData>> =
         egraph.classes().map(|class| (class.id, class)).collect();
 
     let mut descendents: HashMap<Id, HashSet<Id>> = Default::default();
@@ -1332,7 +1297,7 @@ fn compute_all_descendents(
 fn get_descendents(
     egraph: &EGraph<Mdl, TensorAnalysis>,
     eclass: Id,
-    id_to_class: &HashMap<Id, &EClass<Mdl, ValTnsr>>,
+    id_to_class: &HashMap<Id, &EClass<Mdl, TensorData>>,
     check_blacklist: bool,
     descendents: &mut HashMap<Id, HashSet<Id>>,
 ) {
