@@ -11,13 +11,23 @@ use std::process::{Command, Stdio};
 use std::time::*;
 use std::{borrow::Borrow, collections::HashMap};
 
-const MAX_DIM: usize = 8;
-
 #[cxx::bridge(namespace = "tensat")]
 pub mod ffi {
     enum Type {
         i32,
         f32,
+    }
+
+    enum Ops {
+        CompareOp,
+        ConvertOp,
+        ReduceOp,
+        ReshapeOp,
+        MulOp,
+        AddOp,
+        DivOp,
+        SubtractOp,
+        NegOp,
     }
 
     struct Node {
@@ -30,6 +40,7 @@ pub mod ffi {
     extern "Rust" {
         type Mdl;
         type CppGraphConverter;
+        type TensorData;
         type TensorInfo;
         fn new_converter() -> Box<CppGraphConverter>;
         // Exposing the constructor functions with Box<TensorInfo>
@@ -44,21 +55,25 @@ pub mod ffi {
             inpt_2: &TensorInfo,
             comparison_direction: i32,
             comparison_type: i32,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_broadcast_in_dim(
             self: &mut CppGraphConverter,
             inpt: &TensorInfo,
             dimensions: &[i32],
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_convert_op(
             self: &mut CppGraphConverter,
             inpt: &TensorInfo,
             output_type: i32,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_reduce_op(
             self: &mut CppGraphConverter,
             inpt: &TensorInfo,
             dimensions: &[i32],
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_reshape_op(
             self: &mut CppGraphConverter,
@@ -77,14 +92,21 @@ pub mod ffi {
             index_vector_dim: i32,
             slice_sizes: &[i32],
             indices_are_sorted: i32,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_select_op(
             self: &mut CppGraphConverter,
             pred: &TensorInfo,
             on_true: &TensorInfo,
             on_false: &TensorInfo,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
-        fn new_concatenate_op(self: &mut CppGraphConverter, inputs: &[*mut TensorInfo], dimension: i32) -> Box<TensorInfo>;
+        fn new_concatenate_op(
+            self: &mut CppGraphConverter,
+            inputs: &[*mut TensorInfo],
+            dimension: i32,
+            shape: &[i32],
+        ) -> Box<TensorInfo>;
         fn new_dot_general_op(
             self: &mut CppGraphConverter,
             lhs: &TensorInfo,
@@ -103,6 +125,7 @@ pub mod ffi {
             edge_padding_low: &[i32],
             edge_padding_high: &[i32],
             interior_padding: &[i32],
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_slice_op(
             self: &mut CppGraphConverter,
@@ -110,62 +133,84 @@ pub mod ffi {
             start_indices: &[i32],
             limit_indices: &[i32],
             strides: &[i32],
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_transpose_op(
             self: &mut CppGraphConverter,
             inpt: &TensorInfo,
             permutation: &[i32],
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_mul_op(
             self: &mut CppGraphConverter,
             lhs: &TensorInfo,
             rhs: &TensorInfo,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_add_op(
             self: &mut CppGraphConverter,
             lhs: &TensorInfo,
             rhs: &TensorInfo,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_div_op(
             self: &mut CppGraphConverter,
             lhs: &TensorInfo,
             rhs: &TensorInfo,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_subtract_op(
             self: &mut CppGraphConverter,
             lhs: &TensorInfo,
             rhs: &TensorInfo,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_min_op(
             self: &mut CppGraphConverter,
             lhs: &TensorInfo,
             rhs: &TensorInfo,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_max_op(
             self: &mut CppGraphConverter,
             lhs: &TensorInfo,
             rhs: &TensorInfo,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
-        fn new_neg_op(self: &mut CppGraphConverter, inpt: &TensorInfo) -> Box<TensorInfo>;
-        fn new_tanh_op(self: &mut CppGraphConverter, inpt: &TensorInfo) -> Box<TensorInfo>;
-        fn new_exp_op(self: &mut CppGraphConverter, inpt: &TensorInfo) -> Box<TensorInfo>;
+        fn new_neg_op(
+            self: &mut CppGraphConverter,
+            inpt: &TensorInfo,
+            shape: &[i32],
+        ) -> Box<TensorInfo>;
+        fn new_tanh_op(
+            self: &mut CppGraphConverter,
+            inpt: &TensorInfo,
+            shape: &[i32],
+        ) -> Box<TensorInfo>;
+        fn new_exp_op(
+            self: &mut CppGraphConverter,
+            inpt: &TensorInfo,
+            shape: &[i32],
+        ) -> Box<TensorInfo>;
         fn new_iota_op(
             self: &mut CppGraphConverter,
             iota_dimension: i32,
             shape: &[i32],
         ) -> Box<TensorInfo>;
-        fn new_constant_op(self: &mut CppGraphConverter) -> Box<TensorInfo>;
+        fn new_constant_op(self: &mut CppGraphConverter, shape: &[i32]) -> Box<TensorInfo>;
         fn new_dynamic_update_slice_op(
             self: &mut CppGraphConverter,
             operand: &TensorInfo,
             update: &TensorInfo,
             start_indices: &TensorInfo,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_dynamic_slice_op(
             self: &mut CppGraphConverter,
             operand: &TensorInfo,
             start_indices: &TensorInfo,
             slice_sizes: i32,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_scatter_op(
             self: &mut CppGraphConverter,
@@ -173,71 +218,49 @@ pub mod ffi {
             scatter_indices: &TensorInfo,
             updates: &TensorInfo,
             dimension_numbers: i32,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
         fn new_blackbox_op(
             self: &mut CppGraphConverter,
             inpts: &[*mut TensorInfo],
             cpp_num: i32,
+            shape: &[i32],
         ) -> Box<TensorInfo>;
-        // fn new_blackbox_1_op(
-        //     self: &mut CppGraphConverter,
-        //     inpt: &TensorInfo,
-        //     cpp_num: i32,
-        // ) -> Box<TensorInfo>;
         fn optimize(self: &CppGraphConverter) -> Vec<Node>;
         fn print_rec_expr(self: &CppGraphConverter);
         fn pretty_print_rec_expr(self: &CppGraphConverter, width: i32);
     }
 
     unsafe extern "C++" {
-        include!("EqualitySaturation.h");
         type CostModel;
 
-        fn getAddOpCost(
-            &self,
+        fn getBinOpCost(
+            self: &CostModel,
+            op: Ops,
             lhsDims: &[i64],
             lhsType: Type,
             rhsDims: &[i64],
             rhsType: Type,
         ) -> u64;
 
-        fn getMulOpCost(
-            &self,
-            lhsDims: &[i64],
-            lhsType: Type,
-            rhsDims: &[i64],
-            rhsType: Type,
-        ) -> u64;
-
-        fn getDivOpCost(
-            &self,
-            lhsDims: &[i64],
-            lhsType: Type,
-            rhsDims: &[i64],
-            rhsType: Type,
-        ) -> u64;
-
-        fn getSubtractOpCost(
-            &self,
-            lhsDims: &[i64],
-            lhsType: Type,
-            rhsDims: &[i64],
-            rhsType: Type,
-        ) -> u64;
         fn newCostModel() -> UniquePtr<CostModel>;
     }
-}
 
-// Struct for storing information of a tensor. This is passed between functions
-// during graph creation.
-#[derive(Copy, Clone, Default)]
-pub struct TensorInfo {
-    /// Id into the RecExpr constructed
-    pub id: Id,
-    /// Shape of the tensor. We deal with tensor up to MAX_DIM dimensions
-    pub shape: [i32; MAX_DIM],
-    /// Number of dimensions of this tensor
-    pub n_dim: usize,
+    unsafe extern "C++" {
+        include!("EqualitySaturation.h");
+        type ShapeInference;
+
+        fn get_shape(
+            self: &ShapeInference,
+            op: Ops,
+            operand_dims: &[&[i64]],
+            operands_types: &[Type],
+            other_vector_args: &[&[i64]],
+            int_args: &[i64],
+        ) -> Vec<i32>;
+
+        fn newShapeInference() -> UniquePtr<ShapeInference>;
+    }
 }
 
 /// Struct for converting a model specified using our Rust interface to RecExpr
@@ -265,7 +288,10 @@ impl CppGraphConverter {
     }
 
     fn vec_node(&mut self, seq: &[i32]) -> Id {
-        let vec: Vec<Id> = seq.iter().map(|n| self.rec_expr.add(Mdl::Num(*n))).collect();
+        let vec: Vec<Id> = seq
+            .iter()
+            .map(|n| self.rec_expr.add(Mdl::Num(*n)))
+            .collect();
         let node = Mdl::Vec(vec);
         let id = self.rec_expr.add(node);
         id
@@ -280,14 +306,17 @@ impl CppGraphConverter {
         let (shape, n_dim) = self.shape_from_dim(dims);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape,
-            n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn blackbox(&mut self, inpts: &[TensorInfo], cpp_num: i32) -> TensorInfo {
+    pub fn blackbox(&mut self, inpts: &[TensorInfo], cpp_num: i32, shape: &[i32]) -> TensorInfo {
         let cpp_num_node = self.add_or_get_val(cpp_num);
         let mut ids: Vec<Id> = inpts.iter().map(|inpt| inpt.id).collect();
         ids.push(cpp_num_node);
@@ -295,14 +324,14 @@ impl CppGraphConverter {
         // Convert the vector of Ids to a boxed slice and create the BlackBox node
         let new_node = Mdl::BlackBox(ids.into_boxed_slice());
 
-        // TODO: overhaul shape handling everywhere
-        let shape = inpts[0].shape;
-        let n_dim = inpts[0].n_dim;
-
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: shape,
-            n_dim: n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
@@ -313,7 +342,7 @@ impl CppGraphConverter {
     //     let new_node = Mdl::BlackBox_1([inpt.id, cpp_num_node]);
     //     let res = TensorInfo {
     //         id: self.rec_expr.add(new_node),
-    //         shape: inpt.shape, // This is an example, you might want to calculate actual shape
+    //         shape: inpt.shape,
     //         n_dim: inpt.n_dim,
     //     };
     //     self.tensorinfo_map.insert(res.id, res);
@@ -330,7 +359,7 @@ impl CppGraphConverter {
     //     let new_node = Mdl::BlackBox_2([inpt_1.id, inpt_2.id, cpp_num_node]);
     //     let res = TensorInfo {
     //         id: self.rec_expr.add(new_node),
-    //         shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
+    //         shape: inpt_1.shape,
     //         n_dim: inpt_1.n_dim,
     //     };
     //     self.tensorinfo_map.insert(res.id, res);
@@ -348,7 +377,7 @@ impl CppGraphConverter {
     //     let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
     //     let res = TensorInfo {
     //         id: self.rec_expr.add(new_node),
-    //         shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
+    //         shape: inpt_1.shape,
     //         n_dim: inpt_1.n_dim,
     //     };
     //     self.tensorinfo_map.insert(res.id, res);
@@ -367,7 +396,7 @@ impl CppGraphConverter {
     //     let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
     //     let res = TensorInfo {
     //         id: self.rec_expr.add(new_node),
-    //         shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
+    //         shape: inpt_1.shape,
     //         n_dim: inpt_1.n_dim,
     //     };
     //     self.tensorinfo_map.insert(res.id, res);
@@ -387,19 +416,20 @@ impl CppGraphConverter {
     //     let cpp_name_node = Mdl::Var(Symbol::from(cpp_name));
     //     let res = TensorInfo {
     //         id: self.rec_expr.add(new_node),
-    //         shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
+    //         shape: inpt_1.shape,
     //         n_dim: inpt_1.n_dim,
     //     };
     //     self.tensorinfo_map.insert(res.id, res);
     //     res
     // }
 
-    fn compare_op(
+    pub fn compare_op(
         &mut self,
         inpt_1: TensorInfo,
         inpt_2: TensorInfo,
         comparison_direction: i32,
         comparison_type: i32,
+        shape: &[i32],
     ) -> TensorInfo {
         let comparison_direction_node = self.add_or_get_val(comparison_direction);
         let comparison_type_node = self.add_or_get_val(comparison_type);
@@ -409,61 +439,92 @@ impl CppGraphConverter {
             comparison_direction_node,
             comparison_type_node,
         ]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: inpt_1.shape, // This is an example, you might want to calculate actual shape
-            n_dim: inpt_1.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn broadcast_in_dim(&mut self, inpt: TensorInfo, dimensions: &[i32]) -> TensorInfo {
-        let dimensions_id = self.vec_node(dimensions);
+    pub fn broadcast_in_dim(
+        &mut self,
+        inpt: TensorInfo,
+        dimensions: &[i32],
+        shape: &[i32],
+    ) -> TensorInfo {
+        let dim_name = &dimensions.iter().join("_");
+        let node = Mdl::Var(Symbol::from(dim_name));
+        let dimensions_id = self.rec_expr.add(node);
         let new_node = Mdl::BroadcastInDimOp([inpt.id, dimensions_id]);
+
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: inpt.shape, // This is an example, you might want to calculate actual shape
-            n_dim: inpt.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
     // Weird calling convention: the result type is specified with a type annotation, and is NOT a parameter
-    fn convert_op(&mut self, inpt: TensorInfo, output_type: i32) -> TensorInfo {
+    pub fn convert_op(&mut self, inpt: TensorInfo, output_type: i32, shape: &[i32]) -> TensorInfo {
         let output_type_node = self.add_or_get_val(output_type);
         let new_node = Mdl::ConvertOp([inpt.id, output_type_node]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: inpt.shape,
-            n_dim: inpt.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
     // needs to take in a variadic number of input tensors
-    fn reduce_op(&mut self, inpt: TensorInfo, dimensions: &[i32]) -> TensorInfo {
-        let dimensions_id = self.vec_node(dimensions);
+    pub fn reduce_op(&mut self, inpt: TensorInfo, dimensions: &[i32], shape: &[i32]) -> TensorInfo {
+        let dim_name = &dimensions.iter().join("_");
+        let node = Mdl::Var(Symbol::from(dim_name));
+        let dimensions_id = self.rec_expr.add(node);
         let new_node = Mdl::ReduceOp([inpt.id, dimensions_id]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: inpt.shape, // This is an example, you might want to calculate actual shape
-            n_dim: inpt.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn reshape_op(&mut self, inpt: TensorInfo, shape: &[i32]) -> TensorInfo {
-        let shape_id = self.vec_node(shape);
+    pub fn reshape_op(&mut self, inpt: TensorInfo, shape: &[i32]) -> TensorInfo {
+        let shape_name = &shape.iter().join("_");
+        let node = Mdl::Var(Symbol::from(shape_name));
+        let shape_id = self.rec_expr.add(node);
         let new_node = Mdl::ReshapeOp([inpt.id, shape_id]);
         let (shape_new, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: shape_new,
-            n_dim: n_dim,
+            tensor_data: TensorData {
+                shape: shape_new,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
@@ -471,7 +532,7 @@ impl CppGraphConverter {
 
     // https://github.com/openxla/stablehlo/blob/main/docs/spec.md#inputs-44
     // Lots of inputs, we might want to investigate posisble rewrites and based on that decide how to implement this
-    fn gather_op(
+    pub fn gather_op(
         &mut self,
         inpt: TensorInfo,
         start_indices: TensorInfo,
@@ -483,6 +544,7 @@ impl CppGraphConverter {
         index_vector_dim: i32,
         slice_sizes: &[i32],
         indices_are_sorted: i32,
+        shape: &[i32],
     ) -> TensorInfo {
         let offset_dims_id = self.vec_node(offset_dims);
         let collapsed_slice_dims_id = self.vec_node(collapsed_slice_dims);
@@ -506,29 +568,14 @@ impl CppGraphConverter {
             indices_are_sorted_id,
         ]);
 
-        // This logic is incorrect
-        // let mut batch_dim_sizes = start_indices.shape.clone();
-        // // if index_vector_dim < batch_dim_sizes.len() as i32 {
-        // //     batch_dim_sizes.remove(index_vector_dim);
-        // // }
-        //
-        // let mut offset_dim_sizes = slice_sizes.iter().cloned().collect::<Vec<_>>();
-        // for dim in collapsed_slice_dims
-        //     .iter()
-        //     .chain(operand_batching_dims.iter())
-        // {
-        //     offset_dim_sizes[*dim as usize] = 1;
-        // }
-        //
-        // let mut shape = Vec::new();
-        // shape.extend(batch_dim_sizes);
-        // shape.extend(offset_dim_sizes);
-        // let (shape, n_dim) = self.shape_from_dim(*(batch_dim_sizes as [i32]));
-
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: inpt.shape,
-            n_dim: inpt.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
@@ -537,20 +584,23 @@ impl CppGraphConverter {
     fn concatenate_op(
         &mut self,
         inputs: &[TensorInfo],
-        dimension: i32
+        dimension: i32,
+        shape: &[i32],
     ) -> TensorInfo {
         let dimension_id = self.add_or_get_val(dimension);
-        let inputs_node = Mdl::Vec(
-            inputs.iter().map(|i| i.id ).collect()
-        );
+        let inputs_node = Mdl::Vec(inputs.iter().map(|i| i.id).collect());
         let inputs_id = self.rec_expr.add(inputs_node);
         let dimension_id = self.add_or_get_val(dimension);
         let new_node = Mdl::ConcatenateOp([inputs_id, dimension_id]);
 
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: inputs[0].shape,  // FIXME: these are wrong - fix with proper shape inference
-            n_dim: inputs[0].n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
@@ -561,12 +611,18 @@ impl CppGraphConverter {
         pred: TensorInfo,
         on_true: TensorInfo,
         on_false: TensorInfo,
+        shape: &[i32],
     ) -> TensorInfo {
         let new_node = Mdl::SelectOp([pred.id, on_true.id, on_false.id]);
+
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: pred.shape,
-            n_dim: pred.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
@@ -602,23 +658,15 @@ impl CppGraphConverter {
             shape_id,
         ]);
 
-        let (shape_new, n_dim) = self.shape_from_dim(shape);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: shape_new,
-            n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
-
-        /*
-        let mut shape = lhs.shape;
-        shape[shape.len() - 1] = rhs.shape[rhs.shape.len() - 1];
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            shape,
-            n_dim: lhs.n_dim,
-        };
-        */
-
         self.tensorinfo_map.insert(res.id, res);
         res
     }
@@ -630,6 +678,7 @@ impl CppGraphConverter {
         edge_padding_low: &[i32],
         edge_padding_high: &[i32],
         interior_padding: &[i32],
+        shape: &[i32],
     ) -> TensorInfo {
         let edge_padding_low_id = self.vec_node(edge_padding_low);
         let edge_padding_high_id = self.vec_node(edge_padding_high);
@@ -644,223 +693,287 @@ impl CppGraphConverter {
             interior_padding_id,
         ]);
 
-        let mut new_shape = inpt.shape.clone();
-        for (i, &dim) in inpt.shape.iter().enumerate() {
-            new_shape[i] = dim
-                + (edge_padding_low[i])
-                + (edge_padding_high[i])
-                + ((dim.max(1) - 1) * (interior_padding[i]));
-        }
+        let (shape, n_dim) = self.shape_from_dim(shape);
 
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: new_shape,
-            n_dim: inpt.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn slice_op(
+    pub fn slice_op(
         &mut self,
         inpt: TensorInfo,
         start_indices: &[i32],
         limit_indices: &[i32],
         strides: &[i32],
+        shape: &[i32],
     ) -> TensorInfo {
         let start_indices_id = self.vec_node(start_indices);
         let limit_indices_id = self.vec_node(limit_indices);
         let strides_id = self.vec_node(strides);
         let new_node = Mdl::SliceOp([inpt.id, start_indices_id, limit_indices_id, strides_id]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: inpt.shape, // This is an example, you might want to calculate actual shape
-            n_dim: inpt.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn transpose_op(&mut self, inpt: TensorInfo, permutation: &[i32]) -> TensorInfo {
-        let permutation_id = self.vec_node(permutation);
+    pub fn transpose_op(
+        &mut self,
+        inpt: TensorInfo,
+        permutation: &[i32],
+        shape: &[i32],
+    ) -> TensorInfo {
+        let permutation_name = &permutation.iter().join("_");
+        let node = Mdl::Var(Symbol::from(permutation_name));
+        let permutation_id = self.rec_expr.add(node);
         let new_node = Mdl::TransposeOp([inpt.id, permutation_id]);
-        let mut shape = [0; MAX_DIM];
-        let n_dim = inpt.n_dim;
-        for (i, &perm_i) in permutation.iter().enumerate() {
-            shape[i] = inpt.shape[perm_i as usize];
-        }
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape,
-            n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn mul_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
+    pub fn mul_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, shape: &[i32]) -> TensorInfo {
         let new_node = Mdl::MulOp([lhs.id, rhs.id]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: lhs.shape, // This is an example, you might want to calculate actual shape
-            n_dim: lhs.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn add_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
+    pub fn add_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, shape: &[i32]) -> TensorInfo {
         let new_node = Mdl::AddOp([lhs.id, rhs.id]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: lhs.shape, // This is an example, you might want to calculate actual shape
-            n_dim: lhs.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn div_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
+    pub fn div_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, shape: &[i32]) -> TensorInfo {
         let new_node = Mdl::DivOp([lhs.id, rhs.id]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: lhs.shape, // This is an example, you might want to calculate actual shape
-            n_dim: lhs.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn subtract_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
+    pub fn subtract_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, shape: &[i32]) -> TensorInfo {
         let new_node = Mdl::SubtractOp([lhs.id, rhs.id]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: lhs.shape, // This is an example, you might want to calculate actual shape
-            n_dim: lhs.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn min_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
+    pub fn min_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, shape: &[i32]) -> TensorInfo {
         let new_node = Mdl::MinOp([lhs.id, rhs.id]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: lhs.shape, // This is an example, you might want to calculate actual shape
-            n_dim: lhs.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn max_op(&mut self, lhs: TensorInfo, rhs: TensorInfo) -> TensorInfo {
+    pub fn max_op(&mut self, lhs: TensorInfo, rhs: TensorInfo, shape: &[i32]) -> TensorInfo {
         let new_node = Mdl::MaxOp([lhs.id, rhs.id]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: lhs.shape, // This is an example, you might want to calculate actual shape
-            n_dim: lhs.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn neg_op(&mut self, inpt: TensorInfo) -> TensorInfo {
+    pub fn neg_op(&mut self, inpt: TensorInfo, shape: &[i32]) -> TensorInfo {
         let new_node = Mdl::NegOp([inpt.id]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: inpt.shape, // This is an example, you might want to calculate actual shape
-            n_dim: inpt.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn tanh_op(&mut self, inpt: TensorInfo) -> TensorInfo {
+    pub fn tanh_op(&mut self, inpt: TensorInfo, shape: &[i32]) -> TensorInfo {
         let new_node = Mdl::TanhOp([inpt.id]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: inpt.shape, // This is an example, you might want to calculate actual shape
-            n_dim: inpt.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn exp_op(&mut self, inpt: TensorInfo) -> TensorInfo {
+    pub fn exp_op(&mut self, inpt: TensorInfo, shape: &[i32]) -> TensorInfo {
         let new_node = Mdl::ExpOp([inpt.id]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: inpt.shape, // This is an example, you might want to calculate actual shape
-            n_dim: inpt.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn iota_op(&mut self, iota_dimension: i32, shape: &[i32]) -> TensorInfo {
+    pub fn iota_op(&mut self, iota_dimension: i32, shape: &[i32]) -> TensorInfo {
         let iota_dim_id = self.add_or_get_val(iota_dimension);
-        let shape_id = self.vec_node(shape);
+        let shape_name = &shape.iter().join("_");
+        let shape_id = self.rec_expr.add(Mdl::Var(Symbol::from(shape_name)));
         let new_node = Mdl::IotaOp([iota_dim_id, shape_id]);
-        let (shape_new, n_dim) = self.shape_from_dim(shape);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: shape_new,
-            n_dim: n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn constant_op(&mut self) -> TensorInfo {
+    pub fn constant_op(&mut self, shape: &[i32]) -> TensorInfo {
         let new_node = Mdl::ConstantOp([]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: [1; MAX_DIM], // Assuming constant has a shape of [1]
-            n_dim: 1,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn dynamic_update_slice_op(
+    pub fn dynamic_update_slice_op(
         &mut self,
         operand: TensorInfo,
         update: TensorInfo,
         start_indices: TensorInfo,
+        shape: &[i32],
     ) -> TensorInfo {
         let new_node = Mdl::DynamicUpdateSliceOp([operand.id, update.id, start_indices.id]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: operand.shape, // This is an example, you might want to calculate actual shape
-            n_dim: operand.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn dynamic_slice_op(
+    pub fn dynamic_slice_op(
         &mut self,
         operand: TensorInfo,
         start_indices: TensorInfo,
         slice_sizes: i32,
+        shape: &[i32],
     ) -> TensorInfo {
         let slice_sizes_id = self.add_or_get_val(slice_sizes);
         let new_node = Mdl::DynamicSliceOp([operand.id, start_indices.id, slice_sizes_id]);
+
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: operand.shape, // This is an example, you might want to calculate actual shape
-            n_dim: operand.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
     }
 
-    fn scatter_op(
+    pub fn scatter_op(
         &mut self,
         inpt: TensorInfo,
         scatter_indices: TensorInfo,
         updates: TensorInfo,
         dimension_numbers: i32,
+        shape: &[i32],
     ) -> TensorInfo {
         let dimension_numbers_id = self.add_or_get_val(dimension_numbers);
         let new_node = Mdl::ScatterOp([
@@ -869,10 +982,14 @@ impl CppGraphConverter {
             updates.id,
             dimension_numbers_id,
         ]);
+        let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
-            shape: inpt.shape, // This is an example, you might want to calculate actual shape
-            n_dim: inpt.n_dim,
+            tensor_data: TensorData {
+                shape,
+                n_dim,
+                name: None,
+            },
         };
         self.tensorinfo_map.insert(res.id, res);
         res
@@ -890,6 +1007,8 @@ impl CppGraphConverter {
         }
     }
 
+    // TODO: we don't need to have MAX_DIM anymore... this limitation
+    // originated from TASO.
     fn shape_from_dim(&self, dims: &[i32]) -> ([i32; MAX_DIM], usize) {
         if (dims.len() > MAX_DIM) {
             println!("ERROR: op shape exceeds MAX_DIM! e-graph no longer valid.");
@@ -902,8 +1021,8 @@ impl CppGraphConverter {
     }
 
     // Wrapper functions for C++ side
-    pub fn new_input(&mut self, block_arg_number: i32, dims: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.input(block_arg_number, dims))
+    pub fn new_input(&mut self, block_arg_number: i32, shape: &[i32]) -> Box<TensorInfo> {
+        Box::new(self.input(block_arg_number, shape))
     }
 
     pub fn new_compare_op(
@@ -912,24 +1031,42 @@ impl CppGraphConverter {
         inpt_2: &TensorInfo,
         comparison_direction: i32,
         comparison_type: i32,
+        shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.compare_op(*inpt_1, *inpt_2, comparison_direction, comparison_type))
+        Box::new(self.compare_op(
+            *inpt_1,
+            *inpt_2,
+            comparison_direction,
+            comparison_type,
+            shape,
+        ))
     }
 
     pub fn new_broadcast_in_dim(
         &mut self,
         inpt: &TensorInfo,
         dimensions: &[i32],
+        shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.broadcast_in_dim(*inpt, dimensions))
+        Box::new(self.broadcast_in_dim(*inpt, dimensions, shape))
     }
 
-    pub fn new_convert_op(&mut self, inpt: &TensorInfo, output_type: i32) -> Box<TensorInfo> {
-        Box::new(self.convert_op(*inpt, output_type))
+    pub fn new_convert_op(
+        &mut self,
+        inpt: &TensorInfo,
+        output_type: i32,
+        shape: &[i32],
+    ) -> Box<TensorInfo> {
+        Box::new(self.convert_op(*inpt, output_type, shape))
     }
 
-    pub fn new_reduce_op(&mut self, inpt: &TensorInfo, dimensions: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.reduce_op(*inpt, dimensions))
+    pub fn new_reduce_op(
+        &mut self,
+        inpt: &TensorInfo,
+        dimensions: &[i32],
+        shape: &[i32],
+    ) -> Box<TensorInfo> {
+        Box::new(self.reduce_op(*inpt, dimensions, shape))
     }
 
     pub fn new_reshape_op(&mut self, inpt: &TensorInfo, shape: &[i32]) -> Box<TensorInfo> {
@@ -948,6 +1085,7 @@ impl CppGraphConverter {
         index_vector_dim: i32,
         slice_sizes: &[i32],
         indices_are_sorted: i32,
+        shape: &[i32],
     ) -> Box<TensorInfo> {
         Box::new(self.gather_op(
             *inpt,
@@ -960,6 +1098,7 @@ impl CppGraphConverter {
             index_vector_dim,
             slice_sizes,
             indices_are_sorted,
+            shape,
         ))
     }
 
@@ -968,13 +1107,19 @@ impl CppGraphConverter {
         pred: &TensorInfo,
         on_true: &TensorInfo,
         on_false: &TensorInfo,
+        shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.select_op(*pred, *on_true, *on_false))
+        Box::new(self.select_op(*pred, *on_true, *on_false, shape))
     }
 
-    pub fn new_concatenate_op(&mut self, inputs: &[*mut TensorInfo], dimension: i32) -> Box<TensorInfo> {
+    pub fn new_concatenate_op(
+        &mut self,
+        inputs: &[*mut TensorInfo],
+        dimension: i32,
+        shape: &[i32],
+    ) -> Box<TensorInfo> {
         let tensor_infos: Vec<TensorInfo> = inputs.iter().map(|&ptr| unsafe { *ptr }).collect();
-        Box::new(self.concatenate_op(&tensor_infos, dimension))
+        Box::new(self.concatenate_op(&tensor_infos, dimension, shape))
     }
 
     pub fn new_dot_general_op(
@@ -1007,6 +1152,7 @@ impl CppGraphConverter {
         edge_padding_low: &[i32],
         edge_padding_high: &[i32],
         interior_padding: &[i32],
+        shape: &[i32],
     ) -> Box<TensorInfo> {
         Box::new(self.pad_op(
             *inpt,
@@ -1014,6 +1160,7 @@ impl CppGraphConverter {
             edge_padding_low,
             edge_padding_high,
             interior_padding,
+            shape,
         ))
     }
 
@@ -1023,56 +1170,92 @@ impl CppGraphConverter {
         start_indices: &[i32],
         limit_indices: &[i32],
         strides: &[i32],
+        shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.slice_op(*inpt, start_indices, limit_indices, strides))
+        Box::new(self.slice_op(*inpt, start_indices, limit_indices, strides, shape))
     }
 
-    pub fn new_transpose_op(&mut self, inpt: &TensorInfo, permutation: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.transpose_op(*inpt, permutation))
+    pub fn new_transpose_op(
+        &mut self,
+        inpt: &TensorInfo,
+        permutation: &[i32],
+        shape: &[i32],
+    ) -> Box<TensorInfo> {
+        Box::new(self.transpose_op(*inpt, permutation, shape))
     }
 
-    pub fn new_mul_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.mul_op(*lhs, *rhs))
+    pub fn new_mul_op(
+        &mut self,
+        lhs: &TensorInfo,
+        rhs: &TensorInfo,
+        shape: &[i32],
+    ) -> Box<TensorInfo> {
+        Box::new(self.mul_op(*lhs, *rhs, shape))
     }
 
-    pub fn new_add_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.add_op(*lhs, *rhs))
+    pub fn new_add_op(
+        &mut self,
+        lhs: &TensorInfo,
+        rhs: &TensorInfo,
+        shape: &[i32],
+    ) -> Box<TensorInfo> {
+        Box::new(self.add_op(*lhs, *rhs, shape))
     }
 
-    pub fn new_div_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.div_op(*lhs, *rhs))
+    pub fn new_div_op(
+        &mut self,
+        lhs: &TensorInfo,
+        rhs: &TensorInfo,
+        shape: &[i32],
+    ) -> Box<TensorInfo> {
+        Box::new(self.div_op(*lhs, *rhs, shape))
     }
 
-    pub fn new_subtract_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.subtract_op(*lhs, *rhs))
+    pub fn new_subtract_op(
+        &mut self,
+        lhs: &TensorInfo,
+        rhs: &TensorInfo,
+        shape: &[i32],
+    ) -> Box<TensorInfo> {
+        Box::new(self.subtract_op(*lhs, *rhs, shape))
     }
 
-    pub fn new_min_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.min_op(*lhs, *rhs))
+    pub fn new_min_op(
+        &mut self,
+        lhs: &TensorInfo,
+        rhs: &TensorInfo,
+        shape: &[i32],
+    ) -> Box<TensorInfo> {
+        Box::new(self.min_op(*lhs, *rhs, shape))
     }
 
-    pub fn new_max_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.max_op(*lhs, *rhs))
+    pub fn new_max_op(
+        &mut self,
+        lhs: &TensorInfo,
+        rhs: &TensorInfo,
+        shape: &[i32],
+    ) -> Box<TensorInfo> {
+        Box::new(self.max_op(*lhs, *rhs, shape))
     }
 
-    pub fn new_neg_op(&mut self, inpt: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.neg_op(*inpt))
+    pub fn new_neg_op(&mut self, inpt: &TensorInfo, shape: &[i32]) -> Box<TensorInfo> {
+        Box::new(self.neg_op(*inpt, shape))
     }
 
-    pub fn new_tanh_op(&mut self, inpt: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.tanh_op(*inpt))
+    pub fn new_tanh_op(&mut self, inpt: &TensorInfo, shape: &[i32]) -> Box<TensorInfo> {
+        Box::new(self.tanh_op(*inpt, shape))
     }
 
-    pub fn new_exp_op(&mut self, inpt: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.exp_op(*inpt))
+    pub fn new_exp_op(&mut self, inpt: &TensorInfo, shape: &[i32]) -> Box<TensorInfo> {
+        Box::new(self.exp_op(*inpt, shape))
     }
 
     pub fn new_iota_op(&mut self, iota_dimension: i32, shape: &[i32]) -> Box<TensorInfo> {
         Box::new(self.iota_op(iota_dimension, shape))
     }
 
-    pub fn new_constant_op(&mut self) -> Box<TensorInfo> {
-        Box::new(self.constant_op())
+    pub fn new_constant_op(&mut self, shape: &[i32]) -> Box<TensorInfo> {
+        Box::new(self.constant_op(shape))
     }
 
     pub fn new_dynamic_update_slice_op(
@@ -1080,8 +1263,9 @@ impl CppGraphConverter {
         operand: &TensorInfo,
         update: &TensorInfo,
         start_indices: &TensorInfo,
+        shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.dynamic_update_slice_op(*operand, *update, *start_indices))
+        Box::new(self.dynamic_update_slice_op(*operand, *update, *start_indices, shape))
     }
 
     pub fn new_dynamic_slice_op(
@@ -1089,8 +1273,9 @@ impl CppGraphConverter {
         operand: &TensorInfo,
         start_indices: &TensorInfo,
         slice_sizes: i32,
+        shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.dynamic_slice_op(*operand, *start_indices, slice_sizes))
+        Box::new(self.dynamic_slice_op(*operand, *start_indices, slice_sizes, shape))
     }
 
     pub fn new_scatter_op(
@@ -1099,13 +1284,19 @@ impl CppGraphConverter {
         scatter_indices: &TensorInfo,
         updates: &TensorInfo,
         dimension_numbers: i32,
+        shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.scatter_op(*inpt, *scatter_indices, *updates, dimension_numbers))
+        Box::new(self.scatter_op(*inpt, *scatter_indices, *updates, dimension_numbers, shape))
     }
 
-    pub fn new_blackbox_op(&mut self, inpts: &[*mut TensorInfo], cpp_num: i32) -> Box<TensorInfo> {
+    pub fn new_blackbox_op(
+        &mut self,
+        inpts: &[*mut TensorInfo],
+        cpp_num: i32,
+        shape: &[i32],
+    ) -> Box<TensorInfo> {
         let tensor_infos: Vec<TensorInfo> = inpts.iter().map(|&ptr| unsafe { *ptr }).collect();
-        Box::new(self.blackbox(&tensor_infos, cpp_num))
+        Box::new(self.blackbox(&tensor_infos, cpp_num, shape))
     }
 
     // pub fn new_blackbox_1_op(&mut self, inpt: &TensorInfo, cpp_num: i32) -> Box<TensorInfo> {
@@ -1214,13 +1405,11 @@ impl CppGraphConverter {
             rewrite!("transpose-of-transpose"; 
                      "(TransposeOp (TransposeOp ?x ?p) ?p)" => "?x"
                      if decreasing_perm("?p")),
-                     
             rewrite!("flatten-concat";
                      "(ConcatenateOp ?v ?d)" => { FlattenConcat {
                 vec: "?v".parse().unwrap(),
                 dim: "?d".parse().unwrap(),
             }}),
-
             rewrite!("merge-slices";
                      "(ConcatenateOp (Vec (SliceOp ?x ?s1 ?l1 ?s) (SliceOp ?x ?s2 ?l2 ?s)) ?d)" => { MergeSlices {
                 x: "?x".parse().unwrap(),
@@ -1231,14 +1420,9 @@ impl CppGraphConverter {
                 strides: "?s".parse().unwrap(),
                 dim: "?d".parse().unwrap()
             }}),
-
-            rewrite!("concat-dot";
-                     "(DotGeneralOp (ConcatenateOp (Vec ?a ?b) ?d1) (ConcatenateOp (Vec ?c ?d) ?d2) ?lb ?rb ?lc ?rc ?p)"
-                     => "(AddOp (DotGeneralOp ?a ?c ?lb ?rb ?lc ?rc ?p) (DotGeneralOp ?b ?d ?lb ?rb ?lc ?rc ?p))"
-                     if concat_dot_compatible("lc", "d1", "rc", "d2"))  // TODO: untested - awaiting shape inference
         ];
-                     
-        rules.append(&mut custom_rules);   
+
+        rules.append(&mut custom_rules);
 
         let iter_multi = 2;
         let node_multi = 30000;
@@ -1261,7 +1445,7 @@ impl CppGraphConverter {
             .with_time_limit(time_limit_sec)
             .with_iter_limit(iter_limit)
             .with_expr(&start);
-            // .with_hook(move |runner| multi_patterns.run_one(runner));
+        // .with_hook(move |runner| multi_patterns.run_one(runner));
 
         let start_time = Instant::now();
         let mut runner = runner.run(&rules[..]);
@@ -1286,7 +1470,9 @@ impl CppGraphConverter {
         println!("  Number of programs: {}", num_programs);
 
         let (egraph, root) = (runner.egraph, runner.roots[0]);
+        println!("ROOT {}", root);
         let cost_model = CostModel::new(&self.tensorinfo_map);
+        println!("NOT DYING HERE");
         let (best, ext_secs) = extract_by_ilp(&egraph, root, &cost_model);
         println!("{}", best);
 
@@ -1303,6 +1489,7 @@ fn extract_by_ilp(
     let (m_id_map, e_m, h_i, cost_i, g_i, root_m, i_to_nodes, blacklist_i) =
         prep_ilp_data(egraph, root, cost_model);
 
+    println!("prepped ilp data");
     let data = json!({
         "e_m": e_m,
         "h_i": h_i,
