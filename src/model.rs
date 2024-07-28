@@ -3,10 +3,11 @@
 #![allow(non_snake_case)]
 
 //use rand::prelude::*;
+use crate::input::ffi;
 use rand;
-use std::collections::HashSet;
 use std::convert::TryInto;
 use std::time::{Duration, Instant};
+use std::{collections::HashMap, collections::HashSet};
 
 use egg::*;
 
@@ -60,9 +61,8 @@ define_language! {
       "DynamicSliceOp"     = DynamicSliceOp([Id; 3]), // operand, start_indices, slice_sizes
       // Complete pain, has arity 12
       "ScatterOp"          = ScatterOp([Id; 4]), // input, scatter_indices, updates, dimension_numbers
-
-      "BlackBox"           = BlackBox(Box<[Id]>),
-      "Vec"                = Vec(Vec<Id>),
+       "BlackBox"           = BlackBox(Box<[Id]>),
+       "Vec"                = Vec(Vec<Id>),
        Var(Symbol),
        Num(i32),
   }
@@ -82,14 +82,46 @@ impl Default for DataKind {
     }
 }
 
-/// Metadata struct for TensorAnalysis
-#[derive(Debug, Clone)]
-pub struct ValTnsr {
-    // This is the cost of the op
-    pub val: i32,
-    pub cost: i32,
+// /// Metadata struct for TensorAnalysis
+// #[derive(Debug, Clone)]
+// pub struct ValTnsr {
+//     // This is the cost of the op
+//     pub val: i32,
+//     pub cost: i32,
+// }
+
+pub const MAX_DIM: usize = 8;
+
+// Struct for storing shape and value-related metadata for tensors. This
+// is the base metadata struct that is used by Analysis as well.
+#[derive(Copy, Clone, Debug)]
+pub struct TensorData {
+    /// Shape of the tensor. We deal with tensor up to MAX_DIM dimensions
+    pub shape: [i32; MAX_DIM],
+    /// Number of dimensions of this tensor
+    pub n_dim: usize,
+    /// The name string of this eclass if it is a Name type
+    pub name: Option<&'static str>,
 }
 
+// impl Default for TensorData {
+//     fn default() -> Self {
+//         TensorData {
+//             shape: [50; 8],
+//             n_dim: 8,
+//             name: None,
+//         }
+//     }
+// }
+
+// Struct for storing information of a tensor. This is passed between functions
+// during graph creation.
+#[derive(Copy, Clone)]
+pub struct TensorInfo {
+    /// Id into the RecExpr constructed
+    pub id: Id,
+    pub tensor_data: TensorData,
+}
 /// Struct for metadata analysis
 ///
 /// In this analysis, it calls functions on the TASO side (e.g. graph.matmul())
@@ -100,6 +132,10 @@ pub struct TensorAnalysis {
     pub blacklist_nodes: HashSet<Mdl>,
     /// Newly added nodes by order
     pub newly_added: Vec<Mdl>,
+    /// Tracking TensorInfo for C++-originating ops
+    pub tensorinfo_map: HashMap<Id, TensorInfo>,
+    /// C++ FFI for shape inference using stablehlo
+    pub cpp_shape_inference: cxx::UniquePtr<ffi::ShapeInference>, // Holding the C++ cost model
 }
 
 impl Default for TensorAnalysis {
@@ -107,77 +143,211 @@ impl Default for TensorAnalysis {
         TensorAnalysis {
             blacklist_nodes: HashSet::<Mdl>::new(),
             newly_added: Vec::<Mdl>::new(),
+            tensorinfo_map: HashMap::new(),
+            cpp_shape_inference: ffi::newShapeInference(),
         }
     }
 }
 
 impl Analysis<Mdl> for TensorAnalysis {
-    type Data = ValTnsr;
+    type Data = TensorData;
 
     /// Merges two metadata when two eclasses are merged.
     fn merge(&self, to: &mut Self::Data, from: Self::Data) -> bool {
-        false
+        to.shape == from.shape
     }
 
     fn make(egraph: &EGraph<Mdl, Self>, enode: &Mdl) -> Self::Data {
         let x = |i: &Id| &egraph[*i].data;
 
-        // let dim_from_name = |name: &Id| {
-        //     let name_vec: Vec<&str> = x(name).name.split("@").collect();
-        //     assert!(name_vec.len() == 2);
-        //     let dims: Vec<i32> = name_vec[1]
-        //         .split("_")
-        //         .map(|x| x.parse::<i32>().unwrap())
-        //         .collect();
-        //     dims
-        // };
+        let vec_to_max_dim_array = |dims: Vec<i32>| {
+            if (dims.len() > MAX_DIM) {
+                println!("ERROR: op shape exceeds MAX_DIM! e-graph no longer valid.");
+            }
+            let mut shape = [0; MAX_DIM];
+            for (i, dim) in dims.iter().enumerate() {
+                shape[i] = *dim;
+            }
+            (shape, dims.len())
+        };
 
-        // TODO: what do we need to be storing as node metadata?
+        let dim_from_name_string = |name: &str| {
+            let name_vec: Vec<&str> = name.split("@").collect();
+            assert!(name_vec.len() == 2);
+            let dims: Vec<i32> = name_vec[1]
+                .split("_")
+                .map(|x| x.parse::<i32>().unwrap())
+                .collect();
+            vec_to_max_dim_array(dims)
+        };
+
+        fn convert_i32_slice_to_i64_slice(input: &[i32; 8]) -> &[i64] {
+            let converted_slice: Box<[i64]> = input
+                .iter()
+                .map(|x| *x as i64)
+                .collect::<Vec<i64>>()
+                .into_boxed_slice();
+
+            Box::leak(converted_slice)
+        }
+
+        fn shape_from_dim(dims: Vec<i32>) -> ([i32; MAX_DIM], usize) {
+            if (dims.len() > MAX_DIM) {
+                println!("ERROR: op shape exceeds MAX_DIM! e-graph no longer valid.");
+            }
+            let mut shape = [0; MAX_DIM];
+            for (i, dim) in dims.iter().enumerate() {
+                shape[i] = *dim;
+            }
+            (shape, dims.len())
+        }
+
+        fn print_joined_with_underscore(numbers: &Vec<i32>) {
+            let joined_numbers = numbers
+                .iter()
+                .map(|&num| num.to_string())
+                .collect::<Vec<_>>()
+                .join("_");
+            println!("{}", joined_numbers);
+        }
 
         match enode {
-            Mdl::Var(_) => Self::Data { val: 0, cost: 0 }, /* we might need a name field... */
-            Mdl::Num(i) => Self::Data { val: *i, cost: 0 },
-
-            // TODO: Here for testing. Remove later and call cost function with appropriate arguments
-            Mdl::Input([node, block_arg_number]) => Self::Data { val: 0, cost: 0 },
-            Mdl::MulOp([lhs, rhs]) => Self::Data { val: 0, cost: 10 },
-            Mdl::AddOp([lhs, rhs]) => Self::Data { val: 0, cost: 10 },
-            Mdl::DivOp([lhs, rhs]) => Self::Data { val: 0, cost: 10 },
-            Mdl::SubtractOp([lhs, rhs]) => Self::Data { val: 0, cost: 10 },
-
-            // Mdl::CompareOp([input1, input2, comparison, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            // Mdl::BroadcastInDimOp([input, dimensions, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            // Mdl::ConvertOp([input, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            // Mdl::ReduceOp([input, dimensions, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            Mdl::ReshapeOp(_) => Self::Data { val: 0, cost: 10 },
-            // Mdl::GatherOp([input, start_indices, dimension_numbers, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            // Mdl::SelectOp([pred, on_true, on_false, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            Mdl::ConcatenateOp([inputs, dimension]) => Self::Data { val: 0, cost: 0 },
-            Mdl::DotGeneralOp(_) => Self::Data { val: 0, cost: 0 },
-            // Mdl::PadOp([input, padding_value, padding_config, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            Mdl::SliceOp([input, start_indices, limit_indices, strides]) => Self::Data { val: 0, cost: 0 },
-            Mdl::TransposeOp(_) => Self::Data { val: 0, cost: 0 },
-            // Mdl::MulOp([lhs, rhs, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            // Mdl::AddOp([lhs, rhs, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            // Mdl::DivOp([lhs, rhs, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            // Mdl::SubtractOp([lhs, rhs, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            Mdl::MinOp(_) => Self::Data { val: 0, cost: 0 },
-            Mdl::MaxOp([lhs, rhs]) => Self::Data { val: 0, cost: 0 },
-            Mdl::NegOp([input]) => Self::Data { val: 0, cost: 0 },
-            Mdl::TanhOp([input]) => Self::Data { val: 0, cost: 0 },
-            Mdl::ExpOp([input]) => Self::Data { val: 0, cost: 0 },
-            // Mdl::IotaOp([input, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            Mdl::ConstantOp([]) => Self::Data { val: 0, cost: 0 },
-            // Mdl::DynamicUpdateSliceOp([operand, update, start_indices, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            // Mdl::DynamicSliceOp([operand, start_indices, slice_sizes, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            // Mdl::ScatterOp([input, scatter_indices, updates, dimension_numbers, cost]) => Self::Data { val: 0, cost: x(cost).val },
-            Mdl::BlackBox(_) => Self::Data { val: 0, cost: 0 },
-            // Mdl::BlackBox_2([input1, input2]) => Self::Data { val: 0, cost: 0 },
-            // Mdl::BlackBox_3([input1, input2, input3]) => Self::Data { val: 0, cost: 0 },
-            // Mdl::BlackBox_4([input1, input2, input3, input4]) => Self::Data { val: 0, cost: 0 },
-            // Mdl::BlackBox_5([input1, input2, input3, input4, input5]) => Self::Data { val: 0, cost: 0 },
-            Mdl::Vec(_) => Self::Data { val: 0, cost: 0 },
-            _ => unimplemented!(),
+            Mdl::Num(_) => TensorData {
+                shape: [0; MAX_DIM],
+                n_dim: 0,
+                name: Some(&"Num"),
+            },
+            Mdl::Var(name) => {
+                let (shape, n_dim) = dim_from_name_string(name.as_str());
+                let name = Some(name.as_str());
+                TensorData { shape, n_dim, name }
+            }
+            Mdl::Input([node, block_arg_number]) => *x(node),
+            Mdl::MulOp([lhs, rhs]) => {
+                let lhs_dims = x(lhs);
+                let rhs_dims = x(rhs);
+                let arg_dims = [
+                    convert_i32_slice_to_i64_slice(&lhs_dims.shape),
+                    convert_i32_slice_to_i64_slice(&rhs_dims.shape),
+                ];
+                let arg_types = [ffi::Type::f32, ffi::Type::f32];
+                let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+                    ffi::Ops::MulOp,
+                    &arg_dims,
+                    &arg_types,
+                    &[],
+                    &[],
+                );
+                // print_joined_with_underscore(&shape_vec);
+                let (shape, n_dim) = shape_from_dim(shape_vec);
+                TensorData {
+                    shape,
+                    n_dim,
+                    name: None,
+                }
+            }
+            Mdl::AddOp([lhs, rhs]) => {
+                let lhs_dims = x(lhs);
+                let rhs_dims = x(rhs);
+                let arg_dims = [
+                    convert_i32_slice_to_i64_slice(&lhs_dims.shape),
+                    convert_i32_slice_to_i64_slice(&rhs_dims.shape),
+                ];
+                let arg_types = [ffi::Type::f32, ffi::Type::f32];
+                let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+                    ffi::Ops::AddOp,
+                    &arg_dims,
+                    &arg_types,
+                    &[],
+                    &[],
+                );
+                // print_joined_with_underscore(&shape_vec);
+                let (shape, n_dim) = shape_from_dim(shape_vec);
+                TensorData {
+                    shape,
+                    n_dim,
+                    name: None,
+                }
+            }
+            Mdl::DivOp([lhs, rhs]) => {
+                let lhs_dims = x(lhs);
+                let rhs_dims = x(rhs);
+                let arg_dims = [
+                    convert_i32_slice_to_i64_slice(&lhs_dims.shape),
+                    convert_i32_slice_to_i64_slice(&rhs_dims.shape),
+                ];
+                let arg_types = [ffi::Type::f32, ffi::Type::f32];
+                let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+                    ffi::Ops::DivOp,
+                    &arg_dims,
+                    &arg_types,
+                    &[],
+                    &[],
+                );
+                // print_joined_with_underscore(&shape_vec);
+                let (shape, n_dim) = shape_from_dim(shape_vec);
+                TensorData {
+                    shape,
+                    n_dim,
+                    name: None,
+                }
+            }
+            Mdl::SubtractOp([lhs, rhs]) => {
+                let lhs_dims = x(lhs);
+                let rhs_dims = x(rhs);
+                let arg_dims = [
+                    convert_i32_slice_to_i64_slice(&lhs_dims.shape),
+                    convert_i32_slice_to_i64_slice(&rhs_dims.shape),
+                ];
+                let arg_types = [ffi::Type::f32, ffi::Type::f32];
+                let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+                    ffi::Ops::SubtractOp,
+                    &arg_dims,
+                    &arg_types,
+                    &[],
+                    &[],
+                );
+                // print_joined_with_underscore(&shape_vec);
+                let (shape, n_dim) = shape_from_dim(shape_vec);
+                TensorData {
+                    shape,
+                    n_dim,
+                    name: None,
+                }
+            }
+            Mdl::NegOp([operand]) => {
+                let operand_dims = x(operand);
+                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shape)];
+                let arg_types = [ffi::Type::f32];
+                let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+                    ffi::Ops::NegOp,
+                    &arg_dims,
+                    &arg_types,
+                    &[],
+                    &[],
+                );
+                // print_joined_with_underscore(&shape_vec);
+                let (shape, n_dim) = shape_from_dim(shape_vec);
+                TensorData {
+                    shape,
+                    n_dim,
+                    name: None,
+                }
+            }
+            // Mdl::MinOp(_) => Self::Data { val: 0, cost: 0 },
+            // Mdl::MaxOp([lhs, rhs]) => Self::Data { val: 0, cost: 0 },
+            // Mdl::NegOp([input]) => Self::Data { val: 0, cost: 0 },
+            // Mdl::TanhOp([input]) => Self::Data { val: 0, cost: 0 },
+            // Mdl::ExpOp([input]) => Self::Data { val: 0, cost: 0 },
+            // Mdl::ReshapeOp(_) => Self::Data { val: 0, cost: 10 },
+            // Mdl::DotGeneralOp(_) => Self::Data { val: 0, cost: 0 },
+            // Mdl::TransposeOp(_) => Self::Data { val: 0, cost: 0 },
+            // Mdl::ConstantOp([]) => Self::Data { val: 0, cost: 0 },
+            // Mdl::BlackBox(_) => Self::Data { val: 0, cost: 0 },
+            x => {
+                println!("{:?}", x);
+                unimplemented!("Op unimplemented")
+            }
         }
     }
 
