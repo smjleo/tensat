@@ -1,4 +1,4 @@
-use crate::{input::ffi, input::TensorInfo, model::*, rewrites::*};
+use crate::{input::ffi, model::*, rewrites::*};
 use egg::*;
 // use cxx::UniquePtr;
 use serde::{Deserialize, Serialize};
@@ -32,18 +32,12 @@ impl<'a> CostModel<'a> {
     pub fn new(tensorinfo_map: &'a HashMap<Id, TensorInfo>) -> Self {
         Self {
             cpp_cost_model: ffi::newCostModel(),
-            tensorinfo_map: tensorinfo_map,
+            tensorinfo_map,
         }
     }
 
-    pub fn get_shape(&self, id: &Id) -> Vec<i64> {
-        self.tensorinfo_map
-            .get(id)
-            .unwrap()
-            .shape
-            .iter()
-            .map(|&x| x as i64)
-            .collect()
+    pub fn tensor_data_to_shape_vec(&self, tensor_data: TensorData) -> Vec<i64> {
+        tensor_data.shape.iter().map(|&x| x as i64).collect()
     }
 
     /// Gets cost for the enode itself.
@@ -66,11 +60,6 @@ impl<'a> CostModel<'a> {
         match enode {
             Mdl::Num(_) | Mdl::Var(_) | Mdl::Input(_) => 0.0,
             Mdl::BlackBox(_) => 0.0,
-            // Mdl::BlackBox_1(_) => 0.0,
-            // | Mdl::BlackBox_2(_)
-            // | Mdl::BlackBox_3(_)
-            // | Mdl::BlackBox_4(_)
-            // | Mdl::BlackBox_5(_) => 0.0,
             Mdl::CompareOp([input1, input2, comparison_direction, comparison_type]) => 0.0,
             Mdl::BroadcastInDimOp([input, broadcast_dimension]) => 0.0,
             Mdl::ConvertOp([input, output_type]) => 0.0,
@@ -89,9 +78,10 @@ impl<'a> CostModel<'a> {
             Mdl::SliceOp([input, start_indices, limit_indices, strides]) => 5.0,
             Mdl::TransposeOp([input, permutation]) => 3.0,
             Mdl::MulOp([lhs, rhs]) => {
-                let lhs_dims = self.get_shape(lhs);
-                let rhs_dims = self.get_shape(rhs);
-                self.cpp_cost_model.getMulOpCost(
+                let lhs_dims = self.tensor_data_to_shape_vec(*x(lhs));
+                let rhs_dims = self.tensor_data_to_shape_vec(*x(rhs));
+                self.cpp_cost_model.getBinOpCost(
+                    ffi::Ops::MulOp,
                     &lhs_dims,
                     ffi::Type::f32,
                     &rhs_dims,
@@ -99,9 +89,10 @@ impl<'a> CostModel<'a> {
                 ) as f32
             }
             Mdl::AddOp([lhs, rhs]) => {
-                let lhs_dims = self.get_shape(lhs);
-                let rhs_dims = self.get_shape(rhs);
-                self.cpp_cost_model.getAddOpCost(
+                let lhs_dims = self.tensor_data_to_shape_vec(*x(lhs));
+                let rhs_dims = self.tensor_data_to_shape_vec(*x(rhs));
+                self.cpp_cost_model.getBinOpCost(
+                    ffi::Ops::AddOp,
                     &lhs_dims,
                     ffi::Type::f32,
                     &rhs_dims,
@@ -109,9 +100,10 @@ impl<'a> CostModel<'a> {
                 ) as f32
             }
             Mdl::DivOp([lhs, rhs]) => {
-                let lhs_dims = self.get_shape(lhs);
-                let rhs_dims = self.get_shape(rhs);
-                self.cpp_cost_model.getDivOpCost(
+                let lhs_dims = self.tensor_data_to_shape_vec(*x(lhs));
+                let rhs_dims = self.tensor_data_to_shape_vec(*x(rhs));
+                self.cpp_cost_model.getBinOpCost(
+                    ffi::Ops::DivOp,
                     &lhs_dims,
                     ffi::Type::f32,
                     &rhs_dims,
@@ -119,26 +111,47 @@ impl<'a> CostModel<'a> {
                 ) as f32
             }
             Mdl::SubtractOp([lhs, rhs]) => {
-                let lhs_dims = self.get_shape(lhs);
-                let rhs_dims = self.get_shape(rhs);
-                self.cpp_cost_model.getSubtractOpCost(
+                let lhs_dims = self.tensor_data_to_shape_vec(*x(lhs));
+                let rhs_dims = self.tensor_data_to_shape_vec(*x(rhs));
+                self.cpp_cost_model.getBinOpCost(
+                    ffi::Ops::SubtractOp,
                     &lhs_dims,
                     ffi::Type::f32,
                     &rhs_dims,
                     ffi::Type::f32,
                 ) as f32
             }
-            Mdl::MinOp([lhs, rhs]) => 0.0,
-            Mdl::MaxOp([lhs, rhs]) => 0.0,
-            Mdl::NegOp([input]) => 0.0,
-            Mdl::TanhOp([input]) => 0.0,
-            Mdl::ExpOp([input]) => 0.0,
-            Mdl::IotaOp([iota_dimension, shape]) => 0.0,
-            Mdl::ConstantOp([]) => 0.0,
-            Mdl::DynamicUpdateSliceOp([operand, update, start_indices]) => 0.0,
-            Mdl::DynamicSliceOp([operand, start_indices, slice_sizes]) => 0.0,
-            Mdl::ScatterOp([input, scatter_indices, updates, dimension_numbers]) => 0.0,
-            Mdl::ConcatenateOp([inputs, dimension]) => 10.0,
+            Mdl::MinOp([lhs, rhs]) => {
+                let lhs_dims = self.tensor_data_to_shape_vec(*x(lhs));
+                let rhs_dims = self.tensor_data_to_shape_vec(*x(rhs));
+                self.cpp_cost_model.getBinOpCost(
+                    ffi::Ops::SubtractOp,
+                    &lhs_dims,
+                    ffi::Type::f32,
+                    &rhs_dims,
+                    ffi::Type::f32,
+                ) as f32
+            }
+
+            Mdl::MaxOp([lhs, rhs]) => {
+                let lhs_dims = self.tensor_data_to_shape_vec(*x(lhs));
+                let rhs_dims = self.tensor_data_to_shape_vec(*x(rhs));
+                self.cpp_cost_model.getBinOpCost(
+                    ffi::Ops::SubtractOp,
+                    &lhs_dims,
+                    ffi::Type::f32,
+                    &rhs_dims,
+                    ffi::Type::f32,
+                ) as f32
+            }
+            Mdl::NegOp([input]) => 5.0,
+            Mdl::TanhOp([input]) => 9.0,
+            Mdl::ExpOp([input]) => 5.0,
+            Mdl::IotaOp([iota_dimension, shape]) => 5.0,
+            Mdl::ConstantOp([]) => 1.0,
+            Mdl::DynamicUpdateSliceOp([operand, update, start_indices]) => 3.0,
+            Mdl::DynamicSliceOp([operand, start_indices, slice_sizes]) => 4.0,
+            Mdl::ScatterOp([input, scatter_indices, updates, dimension_numbers]) => 6.0,
             _ => 0.0,
         }
     }
@@ -202,7 +215,9 @@ pub fn prep_ilp_data(
                     .map(|id| *id_m_map.get(&egraph.find(*id)).unwrap())
                     .collect(),
             );
+            println!("GETTING COST AS COST FOR {:?}", node);
             cost_i.push(cost_model.get_self_cost(egraph, node));
+            println!("cost {:?}", cost_i.last());
             g_i.push(m);
             i += 1;
         }
@@ -256,6 +271,7 @@ pub fn construct_best_rec(
     egraph: &EGraph<Mdl, TensorAnalysis>,
     expr: &mut RecExpr<Mdl>,
 ) -> Id {
+    println!("infinitelooooop");
     let id = egraph.find(eclass);
 
     match added_memo.get(&id) {
