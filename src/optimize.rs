@@ -36,8 +36,8 @@ impl<'a> CostModel<'a> {
         }
     }
 
-    pub fn tensor_data_to_shape_vec(&self, tensor_data: TensorData) -> Vec<i64> {
-        tensor_data.shape.iter().map(|&x| x as i64).collect()
+    pub fn tensor_data_to_shape_vec(&self, tensor_data: &TensorData) -> Vec<i64> {
+        tensor_data.shapes[0].iter().map(|&x| x as i64).collect()
     }
 
     /// Gets cost for the enode itself.
@@ -78,8 +78,8 @@ impl<'a> CostModel<'a> {
             Mdl::SliceOp([input, start_indices, limit_indices, strides]) => 5.0,
             Mdl::TransposeOp([input, permutation]) => 3.0,
             Mdl::MulOp([lhs, rhs]) => {
-                let lhs_dims = self.tensor_data_to_shape_vec(*x(lhs));
-                let rhs_dims = self.tensor_data_to_shape_vec(*x(rhs));
+                let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
+                let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
                 self.cpp_cost_model.getBinOpCost(
                     ffi::Ops::MulOp,
                     &lhs_dims,
@@ -89,8 +89,8 @@ impl<'a> CostModel<'a> {
                 ) as f32
             }
             Mdl::AddOp([lhs, rhs]) => {
-                let lhs_dims = self.tensor_data_to_shape_vec(*x(lhs));
-                let rhs_dims = self.tensor_data_to_shape_vec(*x(rhs));
+                let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
+                let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
                 self.cpp_cost_model.getBinOpCost(
                     ffi::Ops::AddOp,
                     &lhs_dims,
@@ -100,8 +100,8 @@ impl<'a> CostModel<'a> {
                 ) as f32
             }
             Mdl::DivOp([lhs, rhs]) => {
-                let lhs_dims = self.tensor_data_to_shape_vec(*x(lhs));
-                let rhs_dims = self.tensor_data_to_shape_vec(*x(rhs));
+                let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
+                let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
                 self.cpp_cost_model.getBinOpCost(
                     ffi::Ops::DivOp,
                     &lhs_dims,
@@ -111,8 +111,8 @@ impl<'a> CostModel<'a> {
                 ) as f32
             }
             Mdl::SubtractOp([lhs, rhs]) => {
-                let lhs_dims = self.tensor_data_to_shape_vec(*x(lhs));
-                let rhs_dims = self.tensor_data_to_shape_vec(*x(rhs));
+                let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
+                let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
                 self.cpp_cost_model.getBinOpCost(
                     ffi::Ops::SubtractOp,
                     &lhs_dims,
@@ -122,8 +122,8 @@ impl<'a> CostModel<'a> {
                 ) as f32
             }
             Mdl::MinOp([lhs, rhs]) => {
-                let lhs_dims = self.tensor_data_to_shape_vec(*x(lhs));
-                let rhs_dims = self.tensor_data_to_shape_vec(*x(rhs));
+                let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
+                let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
                 self.cpp_cost_model.getBinOpCost(
                     ffi::Ops::SubtractOp,
                     &lhs_dims,
@@ -134,8 +134,8 @@ impl<'a> CostModel<'a> {
             }
 
             Mdl::MaxOp([lhs, rhs]) => {
-                let lhs_dims = self.tensor_data_to_shape_vec(*x(lhs));
-                let rhs_dims = self.tensor_data_to_shape_vec(*x(rhs));
+                let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
+                let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
                 self.cpp_cost_model.getBinOpCost(
                     ffi::Ops::SubtractOp,
                     &lhs_dims,
