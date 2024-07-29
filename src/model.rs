@@ -3,12 +3,11 @@
 #![allow(non_snake_case)]
 
 //use rand::prelude::*;
-use crate::input::ffi::{self, Shape};
 use rand;
 use std::convert::TryInto;
 use std::time::{Duration, Instant};
 use std::{collections::HashMap, collections::HashSet};
-use {crate::input::ffi, crate::rewrites::*};
+use {crate::input::ffi::{self, Shape}, crate::rewrites::*};
 
 use egg::*;
 
@@ -346,8 +345,8 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
                     &[],
                     &[],
                 );
-                println!("NEGOP");
-                print_joined_with_underscore(&shape_vec);
+                // println!("NEGOP");
+                // print_joined_with_underscore(&shape_vec);
                 let (shapes, n_dims) = shape_from_dim(shape_vec);
                 TensorData {
                     shapes,
@@ -359,8 +358,8 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
                 let lhs_dims = x(lhs);
                 let rhs_dims = x(rhs);
                 let arg_dims = [
-                    convert_i32_slice_to_i64_slice(&lhs_dims.shape),
-                    convert_i32_slice_to_i64_slice(&rhs_dims.shape),
+                    convert_i32_slice_to_i64_slice(&lhs_dims.shapes[0]),
+                    convert_i32_slice_to_i64_slice(&rhs_dims.shapes[0]),
                 ];
                 let arg_types = [ffi::Type::f32, ffi::Type::f32];
                 let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
@@ -370,16 +369,16 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
                     &[],
                     &[],
                 );
-                let (shape, n_dim) = shape_from_dim(shape_vec);
+                let (shapes, n_dims) = shape_from_dim(shape_vec);
                 TensorData {
-                    shape,
-                    n_dim,
+                    shapes,
+                    n_dims,
                     name: None,
                 }
             }
             Mdl::ReshapeOp([operand, shape]) => {
                 let operand_dims = x(operand);
-                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shape)];
+                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shapes[0])];
                 let arg_types = [ffi::Type::f32];
                 let output_shape_vec = get_vec_of_nums(egraph, &egraph[*shape]);
                 let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
@@ -398,7 +397,7 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
             }
             Mdl::TransposeOp([operand, permutation]) => {
                 let operand_dims = x(operand);
-                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shape)];
+                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shapes[0])];
                 let arg_types = [ffi::Type::f32];
                 let permutation_vec = get_vec_of_nums(egraph, &egraph[*permutation]);
                 println!("SHAPE INFERENFCE PERMUTATION");
@@ -423,8 +422,8 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
                 let lhs_dims = x(lhs);
                 let rhs_dims = x(rhs);
                 let arg_dims = [
-                    convert_i32_slice_to_i64_slice(&lhs_dims.shape),
-                    convert_i32_slice_to_i64_slice(&rhs_dims.shape),
+                    convert_i32_slice_to_i64_slice(&lhs_dims.shapes[0]),
+                    convert_i32_slice_to_i64_slice(&rhs_dims.shapes[0]),
                 ];
                 let arg_types = [ffi::Type::f32, ffi::Type::f32];
                 let lhs_batch_dim_vec = get_vec_of_nums(egraph, &egraph[*lhs_batch_dim]);
@@ -456,7 +455,7 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
             }
             Mdl::SliceOp([input, start_indices, limit_indices, strides]) => {
                 let operand_dims = x(input);
-                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shape)];
+                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shapes[0])];
                 let arg_types = [ffi::Type::f32];
                 let start_indices_vec = get_vec_of_nums(egraph, &egraph[*start_indices]);
                 let limit_indices_vec = get_vec_of_nums(egraph, &egraph[*limit_indices]);

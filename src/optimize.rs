@@ -116,7 +116,7 @@ impl<'a> CostModel<'a> {
             Mdl::ReduceOp([input, init_values]) => 0.0,
             Mdl::ReshapeOp([operand, shape]) => {
                 let operand_dims = x(operand);
-                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shape)];
+                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shapes[0])];
                 let arg_types = [ffi::Type::f32];
                 let shape_vec = get_vec_of_nums(egraph, &egraph[*shape]);
                 self.cpp_cost_model.get_cost(
@@ -168,7 +168,7 @@ impl<'a> CostModel<'a> {
             ) => 100.0,
             Mdl::SliceOp([input, start_indices, limit_indices, strides]) => {
                 let operand_dims = x(input);
-                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shape)];
+                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shapes[0])];
                 let arg_types = [ffi::Type::f32];
                 let start_indices_vec = get_vec_of_nums(egraph, &egraph[*start_indices]);
                 let limit_indices_vec = get_vec_of_nums(egraph, &egraph[*limit_indices]);
@@ -187,7 +187,7 @@ impl<'a> CostModel<'a> {
             }
             Mdl::TransposeOp([operand, permutation]) => {
                 let operand_dims = x(operand);
-                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shape)];
+                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shapes[0])];
                 let arg_types = [ffi::Type::f32];
                 let permutation_vec = get_vec_of_nums(egraph, &egraph[*permutation]);
                 self.cpp_cost_model.get_cost(
