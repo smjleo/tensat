@@ -19,15 +19,33 @@ pub mod ffi {
     }
 
     enum Ops {
+        Input,
         CompareOp,
+        BroadcastInDimOp,
         ConvertOp,
         ReduceOp,
         ReshapeOp,
+        GatherOp,
+        SelectOp,
+        ConcatenateOp,
+        DotGeneralOp,
+        PadOp,
+        SliceOp,
+        TransposeOp,
         MulOp,
         AddOp,
         DivOp,
         SubtractOp,
+        MinOp,
+        MaxOp,
         NegOp,
+        TanhOp,
+        ExpOp,
+        IotaOp,
+        ConstantOp,
+        DynamicUpdateSliceOp,
+        DynamicSliceOp,
+        ScatterOp,
     }
 
     struct Node {
@@ -234,13 +252,13 @@ pub mod ffi {
     unsafe extern "C++" {
         type CostModel;
 
-        fn getBinOpCost(
+        fn get_cost(
             self: &CostModel,
             op: Ops,
-            lhsDims: &[i64],
-            lhsType: Type,
-            rhsDims: &[i64],
-            rhsType: Type,
+            operand_dims: &[&[i64]],
+            operands_types: &[Type],
+            other_vector_args: &[&[i64]],
+            int_args: &[i64],
         ) -> u64;
 
         fn newCostModel() -> UniquePtr<CostModel>;
@@ -272,6 +290,7 @@ pub mod ffi {
 pub struct CppGraphConverter {
     rec_expr: RecExpr<Mdl>,
     scalar_map: HashMap<i32, Id>,
+    scalar_map_inv: HashMap<Id, i32>,
     name_gen: NameGen,
     tensorinfo_map: HashMap<Id, TensorInfo>,
 }
@@ -288,10 +307,7 @@ impl CppGraphConverter {
     }
 
     fn vec_node(&mut self, seq: &[i32]) -> Id {
-        let vec: Vec<Id> = seq
-            .iter()
-            .map(|n| self.rec_expr.add(Mdl::Num(*n)))
-            .collect();
+        let vec: Vec<Id> = seq.iter().map(|n| self.add_or_get_val(*n)).collect();
         let node = Mdl::Vec(vec);
         let id = self.rec_expr.add(node);
         id
@@ -738,9 +754,9 @@ impl CppGraphConverter {
         permutation: &[i32],
         shape: &[i32],
     ) -> TensorInfo {
-        let permutation_name = &permutation.iter().join("_");
-        let node = Mdl::Var(Symbol::from(permutation_name));
-        let permutation_id = self.rec_expr.add(node);
+        println!("INPUT PERMUTATION");
+        println!("{:?}", permutation);
+        let permutation_id = self.vec_node(permutation);
         let new_node = Mdl::TransposeOp([inpt.id, permutation_id]);
         let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
@@ -892,8 +908,7 @@ impl CppGraphConverter {
 
     pub fn iota_op(&mut self, iota_dimension: i32, shape: &[i32]) -> TensorInfo {
         let iota_dim_id = self.add_or_get_val(iota_dimension);
-        let shape_name = &shape.iter().join("_");
-        let shape_id = self.rec_expr.add(Mdl::Var(Symbol::from(shape_name)));
+        let shape_id = self.vec_node(shape);
         let new_node = Mdl::IotaOp([iota_dim_id, shape_id]);
         let (shape, n_dim) = self.shape_from_dim(shape);
         let res = TensorInfo {
@@ -1002,6 +1017,7 @@ impl CppGraphConverter {
                 let node = Mdl::Num(val);
                 let id = self.rec_expr.add(node);
                 self.scalar_map.insert(val, id);
+                self.scalar_map_inv.insert(id, val);
                 id
             }
         }
@@ -1379,7 +1395,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn optimize(&self) -> Vec<ffi::Node> {
+    pub fn optimize<'a>(&'a self) -> Vec<ffi::Node> {
         let start = &self.rec_expr;
 
         // Configuration
@@ -1394,17 +1410,26 @@ impl CppGraphConverter {
         println!("The current directory is {}", path.display());
         let rule_file = "src/enzyme_ad/jax/deps/tensat/converted.txt";
 
-        let learned_rules =
+        let learned_rules_str =
             read_to_string(rule_file).expect("Something went wrong reading the rule file");
+        let learned_rules: &'a str = Box::leak(learned_rules_str.into_boxed_str());
+        let time_limit_sec = Duration::new(n_sec, 0);
         let pre_defined_rules = PRE_DEFINED_RULES.iter().map(|&x| x);
         let split_rules: Vec<&str> = learned_rules.split("\n").chain(pre_defined_rules).collect();
         let do_filter_after = no_cycle && filter_after;
+        let analysis = TensorAnalysis::new(&self.tensorinfo_map, &self.scalar_map_inv);
+        let runner = Runner::<Mdl, TensorAnalysis, ()>::new(analysis)
+            .with_node_limit(node_limit)
+            .with_time_limit(time_limit_sec)
+            .with_iter_limit(iter_limit)
+            .with_expr(&start);
+        // .with_hook(move |runner| multi_patterns.run_one(runner));
         let mut rules = rules_from_str(split_rules, do_filter_after);
 
-        let mut custom_rules: Vec<Rewrite<Mdl, TensorAnalysis>> = vec![
-            rewrite!("transpose-of-transpose"; 
-                     "(TransposeOp (TransposeOp ?x ?p) ?p)" => "?x"
-                     if decreasing_perm("?p")),
+        let mut custom_rules: Vec<Rewrite<Mdl, TensorAnalysis<'a>>> = vec![
+            rewrite!("transpose-of-transpose";
+             "(TransposeOp (TransposeOp ?x ?p) ?p)" => "?x"
+             if decreasing_perm("?p")),
             rewrite!("flatten-concat";
                      "(ConcatenateOp ?v ?d)" => { FlattenConcat {
                 vec: "?v".parse().unwrap(),
@@ -1438,14 +1463,6 @@ impl CppGraphConverter {
             node_multi,
             n_sec,
         );
-
-        let time_limit_sec = Duration::new(n_sec, 0);
-        let runner = Runner::<Mdl, TensorAnalysis, ()>::default()
-            .with_node_limit(node_limit)
-            .with_time_limit(time_limit_sec)
-            .with_iter_limit(iter_limit)
-            .with_expr(&start);
-        // .with_hook(move |runner| multi_patterns.run_one(runner));
 
         let start_time = Instant::now();
         let mut runner = runner.run(&rules[..]);
