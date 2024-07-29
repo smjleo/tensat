@@ -142,7 +142,23 @@ pub static PRE_DEFINED_MULTI: &[&str] = &[
 
 // TODO: We should really clean these. Just dirty hacks for now to test out conditional rewrites
 
-fn get_vec(eclass: &EClass<Mdl, TensorData>) -> &Vec<Id> {
+pub fn get_vec_of_nums(
+    egraph: &EGraph<Mdl, TensorAnalysis>,
+    eclass: &EClass<Mdl, TensorData>,
+) -> Vec<i32> {
+    let vec = get_vec(eclass);
+    let mut result = Vec::new();
+
+    for id in vec.iter() {
+        let num_eclass = &egraph[*id];
+        let num = get_num(&num_eclass);
+        result.push(*num);
+    }
+
+    result
+}
+
+pub fn get_vec(eclass: &EClass<Mdl, TensorData>) -> &Vec<Id> {
     for node in eclass.iter() {
         match node {
             Mdl::Vec(vec) => return vec,
@@ -153,7 +169,7 @@ fn get_vec(eclass: &EClass<Mdl, TensorData>) -> &Vec<Id> {
     panic!("no vec found");
 }
 
-fn get_num(eclass: &EClass<Mdl, TensorData>) -> &i32 {
+pub fn get_num(eclass: &EClass<Mdl, TensorData>) -> &i32 {
     for node in eclass.iter() {
         match node {
             Mdl::Num(n) => return n,
@@ -172,9 +188,9 @@ fn make_vec(egraph: &mut EGraph<Mdl, TensorAnalysis>, seq: &[Id]) -> Id {
     egraph.add(Mdl::Vec((*seq).to_vec()))
 }
 
-pub fn decreasing_perm(
-    var: &'static str,
-) -> impl Fn(&mut EGraph<Mdl, TensorAnalysis>, Id, &Subst) -> bool {
+pub fn decreasing_perm<'a>(
+    var: &'a str,
+) -> impl Fn(&mut EGraph<Mdl, TensorAnalysis<'_>>, Id, &Subst) -> bool + 'a {
     let var = var.parse().unwrap();
     move |egraph, _, subst: &Subst| {
         let eclass = &egraph[subst[var]];
@@ -205,7 +221,7 @@ pub struct FlattenConcat {
     pub dim: Var,
 }
 
-impl Applier<Mdl, TensorAnalysis> for FlattenConcat {
+impl Applier<Mdl, TensorAnalysis<'_>> for FlattenConcat {
     fn apply_one(
         &self,
         egraph: &mut EGraph<Mdl, TensorAnalysis>,
@@ -262,7 +278,7 @@ pub struct MergeSlices {
     pub dim: Var,
 }
 
-impl Applier<Mdl, TensorAnalysis> for MergeSlices {
+impl Applier<Mdl, TensorAnalysis<'_>> for MergeSlices {
     fn apply_one(
         &self,
         egraph: &mut EGraph<Mdl, TensorAnalysis>,
@@ -352,7 +368,7 @@ struct CheckApply {
     filter_after: bool,
 }
 
-impl Applier<Mdl, TensorAnalysis> for CheckApply {
+impl Applier<Mdl, TensorAnalysis<'_>> for CheckApply {
     /// Apply the pattern once. Check the new nodes are valid before actually
     /// apply. See Applier trait in egg for more information.
     fn apply_one(
