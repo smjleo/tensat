@@ -3,11 +3,11 @@
 #![allow(non_snake_case)]
 
 //use rand::prelude::*;
-use crate::input::ffi;
 use rand;
 use std::convert::TryInto;
 use std::time::{Duration, Instant};
 use std::{collections::HashMap, collections::HashSet};
+use {crate::input::ffi, crate::rewrites::*};
 
 use egg::*;
 
@@ -127,29 +127,35 @@ pub struct TensorInfo {
 /// In this analysis, it calls functions on the TASO side (e.g. graph.matmul())
 /// to create (or get) new ops/nodes and stores pointers to the output tensors.
 /// TASO will measure and store the runtime cost when creating a new op/node.
-pub struct TensorAnalysis {
+pub struct TensorAnalysis<'a> {
     /// Record blacklisted nodes for filtering cycles
     pub blacklist_nodes: HashSet<Mdl>,
     /// Newly added nodes by order
     pub newly_added: Vec<Mdl>,
     /// Tracking TensorInfo for C++-originating ops
-    pub tensorinfo_map: HashMap<Id, TensorInfo>,
+    pub tensorinfo_map: &'a HashMap<Id, TensorInfo>,
     /// C++ FFI for shape inference using stablehlo
     pub cpp_shape_inference: cxx::UniquePtr<ffi::ShapeInference>, // Holding the C++ cost model
+    /// for mapping Num nodes back to their values
+    pub scalar_map: &'a HashMap<Id, i32>,
 }
 
-impl Default for TensorAnalysis {
-    fn default() -> Self {
+impl<'a> TensorAnalysis<'a> {
+    pub fn new<'b: 'a>(
+        tensorinfo_map: &'b HashMap<Id, TensorInfo>,
+        scalar_map: &'b HashMap<Id, i32>,
+    ) -> Self {
         TensorAnalysis {
             blacklist_nodes: HashSet::<Mdl>::new(),
             newly_added: Vec::<Mdl>::new(),
-            tensorinfo_map: HashMap::new(),
+            tensorinfo_map,
             cpp_shape_inference: ffi::newShapeInference(),
+            scalar_map,
         }
     }
 }
 
-impl Analysis<Mdl> for TensorAnalysis {
+impl Analysis<Mdl> for TensorAnalysis<'_> {
     type Data = TensorData;
 
     /// Merges two metadata when two eclasses are merged.
@@ -160,30 +166,10 @@ impl Analysis<Mdl> for TensorAnalysis {
     fn make(egraph: &EGraph<Mdl, Self>, enode: &Mdl) -> Self::Data {
         let x = |i: &Id| &egraph[*i].data;
 
-        let vec_to_max_dim_array = |dims: Vec<i32>| {
-            if (dims.len() > MAX_DIM) {
-                println!("ERROR: op shape exceeds MAX_DIM! e-graph no longer valid.");
-            }
-            let mut shape = [0; MAX_DIM];
-            for (i, dim) in dims.iter().enumerate() {
-                shape[i] = *dim;
-            }
-            (shape, dims.len())
-        };
-
-        let dim_from_name_string = |name: &str| {
-            let name_vec: Vec<&str> = name.split("@").collect();
-            assert!(name_vec.len() == 2);
-            let dims: Vec<i32> = name_vec[1]
-                .split("_")
-                .map(|x| x.parse::<i32>().unwrap())
-                .collect();
-            vec_to_max_dim_array(dims)
-        };
-
         fn convert_i32_slice_to_i64_slice(input: &[i32; 8]) -> &[i64] {
             let converted_slice: Box<[i64]> = input
                 .iter()
+                .filter(|&x| *x != 0)
                 .map(|x| *x as i64)
                 .collect::<Vec<i64>>()
                 .into_boxed_slice();
@@ -193,7 +179,7 @@ impl Analysis<Mdl> for TensorAnalysis {
 
         fn shape_from_dim(dims: Vec<i32>) -> ([i32; MAX_DIM], usize) {
             if (dims.len() > MAX_DIM) {
-                println!("ERROR: op shape exceeds MAX_DIM! e-graph no longer valid.");
+                panic!("Op shape exceeds MAX_DIM!");
             }
             let mut shape = [0; MAX_DIM];
             for (i, dim) in dims.iter().enumerate() {
@@ -211,8 +197,22 @@ impl Analysis<Mdl> for TensorAnalysis {
             println!("{}", joined_numbers);
         }
 
+        fn map_to_i64(vec: Vec<i32>) -> Vec<i64> {
+            vec.into_iter().map(|x| x as i64).collect()
+        }
+
+        let dim_from_name_string = |name: &str| {
+            let name_vec: Vec<&str> = name.split("@").collect();
+            assert!(name_vec.len() == 2);
+            let dims: Vec<i32> = name_vec[1]
+                .split("_")
+                .map(|x| x.parse::<i32>().unwrap())
+                .collect();
+            shape_from_dim(dims)
+        };
+
         match enode {
-            Mdl::Num(_) => TensorData {
+            Mdl::Num(_) | Mdl::Vec(_) => TensorData {
                 shape: [0; MAX_DIM],
                 n_dim: 0,
                 name: Some(&"Num"),
@@ -238,7 +238,8 @@ impl Analysis<Mdl> for TensorAnalysis {
                     &[],
                     &[],
                 );
-                // print_joined_with_underscore(&shape_vec);
+                println!("MulOp");
+                print_joined_with_underscore(&shape_vec);
                 let (shape, n_dim) = shape_from_dim(shape_vec);
                 TensorData {
                     shape,
@@ -261,7 +262,8 @@ impl Analysis<Mdl> for TensorAnalysis {
                     &[],
                     &[],
                 );
-                // print_joined_with_underscore(&shape_vec);
+                println!("AddOp");
+                print_joined_with_underscore(&shape_vec);
                 let (shape, n_dim) = shape_from_dim(shape_vec);
                 TensorData {
                     shape,
@@ -284,7 +286,8 @@ impl Analysis<Mdl> for TensorAnalysis {
                     &[],
                     &[],
                 );
-                // print_joined_with_underscore(&shape_vec);
+                println!("DivOp");
+                print_joined_with_underscore(&shape_vec);
                 let (shape, n_dim) = shape_from_dim(shape_vec);
                 TensorData {
                     shape,
@@ -307,7 +310,7 @@ impl Analysis<Mdl> for TensorAnalysis {
                     &[],
                     &[],
                 );
-                // print_joined_with_underscore(&shape_vec);
+                print_joined_with_underscore(&shape_vec);
                 let (shape, n_dim) = shape_from_dim(shape_vec);
                 TensorData {
                     shape,
@@ -326,7 +329,8 @@ impl Analysis<Mdl> for TensorAnalysis {
                     &[],
                     &[],
                 );
-                // print_joined_with_underscore(&shape_vec);
+                println!("NEGOP");
+                print_joined_with_underscore(&shape_vec);
                 let (shape, n_dim) = shape_from_dim(shape_vec);
                 TensorData {
                     shape,
@@ -334,16 +338,130 @@ impl Analysis<Mdl> for TensorAnalysis {
                     name: None,
                 }
             }
-            // Mdl::MinOp(_) => Self::Data { val: 0, cost: 0 },
-            // Mdl::MaxOp([lhs, rhs]) => Self::Data { val: 0, cost: 0 },
-            // Mdl::NegOp([input]) => Self::Data { val: 0, cost: 0 },
-            // Mdl::TanhOp([input]) => Self::Data { val: 0, cost: 0 },
-            // Mdl::ExpOp([input]) => Self::Data { val: 0, cost: 0 },
-            // Mdl::ReshapeOp(_) => Self::Data { val: 0, cost: 10 },
-            // Mdl::DotGeneralOp(_) => Self::Data { val: 0, cost: 0 },
-            // Mdl::TransposeOp(_) => Self::Data { val: 0, cost: 0 },
-            // Mdl::ConstantOp([]) => Self::Data { val: 0, cost: 0 },
-            // Mdl::BlackBox(_) => Self::Data { val: 0, cost: 0 },
+            Mdl::MaxOp([lhs, rhs]) => {
+                let lhs_dims = x(lhs);
+                let rhs_dims = x(rhs);
+                let arg_dims = [
+                    convert_i32_slice_to_i64_slice(&lhs_dims.shape),
+                    convert_i32_slice_to_i64_slice(&rhs_dims.shape),
+                ];
+                let arg_types = [ffi::Type::f32, ffi::Type::f32];
+                let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+                    ffi::Ops::MaxOp,
+                    &arg_dims,
+                    &arg_types,
+                    &[],
+                    &[],
+                );
+                let (shape, n_dim) = shape_from_dim(shape_vec);
+                TensorData {
+                    shape,
+                    n_dim,
+                    name: None,
+                }
+            }
+            Mdl::ReshapeOp([operand, shape]) => {
+                let operand_dims = x(operand);
+                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shape)];
+                let arg_types = [ffi::Type::f32];
+                let output_shape_vec = get_vec_of_nums(egraph, &egraph[*shape]);
+                let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+                    ffi::Ops::ReshapeOp,
+                    &arg_dims,
+                    &arg_types,
+                    &[map_to_i64(output_shape_vec).as_slice()],
+                    &[],
+                );
+                let (shape, n_dim) = shape_from_dim(shape_vec);
+                TensorData {
+                    shape,
+                    n_dim,
+                    name: None,
+                }
+            }
+            Mdl::TransposeOp([operand, permutation]) => {
+                let operand_dims = x(operand);
+                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shape)];
+                let arg_types = [ffi::Type::f32];
+                let permutation_vec = get_vec_of_nums(egraph, &egraph[*permutation]);
+                println!("SHAPE INFERENFCE PERMUTATION");
+                println!("{:?}", permutation_vec);
+                let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+                    ffi::Ops::TransposeOp,
+                    &arg_dims,
+                    &arg_types,
+                    &[map_to_i64(permutation_vec).as_slice()],
+                    &[],
+                );
+                let (shape, n_dim) = shape_from_dim(shape_vec);
+                TensorData {
+                    shape,
+                    n_dim,
+                    name: None,
+                }
+            }
+            Mdl::DotGeneralOp(
+                [lhs, rhs, lhs_batch_dim, rhs_batch_dim, lhs_contract_dim, rhs_contract_dim, precision_config, shape],
+            ) => {
+                let lhs_dims = x(lhs);
+                let rhs_dims = x(rhs);
+                let arg_dims = [
+                    convert_i32_slice_to_i64_slice(&lhs_dims.shape),
+                    convert_i32_slice_to_i64_slice(&rhs_dims.shape),
+                ];
+                let arg_types = [ffi::Type::f32, ffi::Type::f32];
+                let lhs_batch_dim_vec = get_vec_of_nums(egraph, &egraph[*lhs_batch_dim]);
+                let rhs_batch_dim_vec = get_vec_of_nums(egraph, &egraph[*rhs_batch_dim]);
+                let lhs_contract_dim_vec = get_vec_of_nums(egraph, &egraph[*lhs_contract_dim]);
+                let rhs_contract_dim_vec = get_vec_of_nums(egraph, &egraph[*rhs_contract_dim]);
+                let precision_config_vec = get_vec_of_nums(egraph, &egraph[*precision_config]);
+                let output_shape_vec = get_vec_of_nums(egraph, &egraph[*shape]);
+                let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+                    ffi::Ops::DotGeneralOp,
+                    &arg_dims,
+                    &arg_types,
+                    &[
+                        map_to_i64(lhs_batch_dim_vec).as_slice(),
+                        map_to_i64(rhs_batch_dim_vec).as_slice(),
+                        map_to_i64(lhs_contract_dim_vec).as_slice(),
+                        map_to_i64(rhs_contract_dim_vec).as_slice(),
+                        map_to_i64(precision_config_vec).as_slice(),
+                        map_to_i64(output_shape_vec).as_slice(),
+                    ],
+                    &[],
+                );
+                let (shape, n_dim) = shape_from_dim(shape_vec);
+                TensorData {
+                    shape,
+                    n_dim,
+                    name: None,
+                }
+            }
+            Mdl::SliceOp([input, start_indices, limit_indices, strides]) => {
+                let operand_dims = x(input);
+                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shape)];
+                let arg_types = [ffi::Type::f32];
+                let start_indices_vec = get_vec_of_nums(egraph, &egraph[*start_indices]);
+                let limit_indices_vec = get_vec_of_nums(egraph, &egraph[*limit_indices]);
+                let strides_vec = get_vec_of_nums(egraph, &egraph[*strides]);
+                let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+                    ffi::Ops::SliceOp,
+                    &arg_dims,
+                    &arg_types,
+                    &[
+                        map_to_i64(start_indices_vec).as_slice(),
+                        map_to_i64(limit_indices_vec).as_slice(),
+                        map_to_i64(strides_vec).as_slice(),
+                    ],
+                    &[],
+                );
+                let (shape, n_dim) = shape_from_dim(shape_vec);
+                TensorData {
+                    shape,
+                    n_dim,
+                    name: None,
+                }
+            }
             x => {
                 println!("{:?}", x);
                 unimplemented!("Op unimplemented")
