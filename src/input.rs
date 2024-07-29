@@ -72,6 +72,11 @@ pub mod ffi {
             block_arg_number: i32,
             dims: &[i32],
         ) -> Box<TensorInfo>;
+        fn new_index(
+            self: &mut CppGraphConverter, 
+            index: i32,
+            inpt: &TensorInfo
+        ) -> Box<TensorInfo>;
         fn new_compare_op(
             self: &mut CppGraphConverter,
             inpt_1: &TensorInfo,
@@ -332,6 +337,21 @@ impl CppGraphConverter {
                 n_dims,
                 name: None,
             },
+        };
+        self.tensorinfo_map.insert(res.id, res.clone());
+        res
+    }
+
+    fn index(&mut self, index: i32, inpt: &TensorInfo) -> TensorInfo {
+        let index_num_node = self.add_or_get_val(index);
+        let new_node = Mdl::Index([index_num_node, inpt.id]);
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes: vec![inpt.tensor_data.shapes[index as usize]],
+                n_dims: vec![inpt.tensor_data.n_dims[index as usize]],
+                name: None,
+            }
         };
         self.tensorinfo_map.insert(res.id, res.clone());
         res
@@ -964,6 +984,10 @@ impl CppGraphConverter {
         Box::new(self.input(block_arg_number, shape))
     }
 
+    pub fn new_index(&mut self, index: i32, inpt: &TensorInfo) -> Box<TensorInfo> {
+        Box::new(self.index(index, inpt))
+    }
+
     pub fn new_compare_op(
         &mut self,
         inpt_1: &TensorInfo,
@@ -1292,6 +1316,7 @@ impl CppGraphConverter {
                 // TODO: More clever pattern matching
                 Mdl::Vec(ops) => new_node("Vec", ops),
                 Mdl::Input(ops) => new_node("Input", ops),
+                Mdl::Index(ops) => new_node("Index", ops),
                 Mdl::ConstantOp(ops) => new_node("ConstantOp", ops),
                 Mdl::ReshapeOp(ops) => new_node("ReshapeOp", ops),
                 Mdl::ConcatenateOp(ops) => new_node("ConcatenateOp", ops),
@@ -1410,9 +1435,7 @@ impl CppGraphConverter {
         println!("  Number of programs: {}", num_programs);
 
         let (egraph, root) = (runner.egraph, runner.roots[0]);
-        println!("ROOT {}", root);
         let cost_model = CostModel::new(&self.tensorinfo_map);
-        println!("NOT DYING HERE");
         let (best, ext_secs) = extract_by_ilp(&egraph, root, &cost_model);
         println!("{}", best);
 

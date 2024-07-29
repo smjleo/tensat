@@ -109,7 +109,7 @@ impl<'a> CostModel<'a> {
         };
         match enode {
             // NO REWRITES APPLY TO THESE SO THEY CAN HAVE ARBITRARY COST
-            Mdl::Num(_) | Mdl::Var(_) | Mdl::Input(_) | Mdl::Vec(_) | Mdl::BlackBox(_) => 0.0,
+            Mdl::Num(_) | Mdl::Var(_) | Mdl::Input(_) | Mdl::Vec(_) | Mdl::BlackBox(_) | Mdl::Index(_) => 0.0,
             Mdl::CompareOp([input1, input2, comparison_direction, comparison_type]) => 0.0,
             Mdl::BroadcastInDimOp([input, broadcast_dimension]) => 0.0,
             Mdl::ConvertOp([input, output_type]) => 0.0,
@@ -365,9 +365,7 @@ pub fn prep_ilp_data(
                     .map(|id| *id_m_map.get(&egraph.find(*id)).unwrap())
                     .collect(),
             );
-            println!("GETTING COST AS COST FOR {:?}", node);
             cost_i.push(cost_model.get_self_cost(egraph, node));
-            println!("cost {:?}", cost_i.last());
             g_i.push(m);
             i += 1;
         }
@@ -421,7 +419,6 @@ pub fn construct_best_rec(
     egraph: &EGraph<Mdl, TensorAnalysis>,
     expr: &mut RecExpr<Mdl>,
 ) -> Id {
-    println!("infinitelooooop");
     let id = egraph.find(eclass);
 
     match added_memo.get(&id) {

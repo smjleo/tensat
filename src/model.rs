@@ -63,6 +63,7 @@ define_language! {
       "ScatterOp"          = ScatterOp([Id; 4]), // input, scatter_indices, updates, dimension_numbers
        "BlackBox"           = BlackBox(Box<[Id]>),
        "Vec"                = Vec(Vec<Id>),
+       "Index"              = Index([Id; 2]),
        Var(Symbol),
        Num(i32),
   }
@@ -230,6 +231,17 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
             vec.into_iter().map(|x| x as i64).collect()
         }
 
+        let get_num = |id| {
+            for node in egraph[id].iter() {
+                match node {
+                    Mdl::Num(x) => { return x }
+                    _ => {}
+                }
+            }
+
+            panic!("no num found");
+        };
+
         match enode {
             Mdl::Num(_) | Mdl::Vec(_) => TensorData {
                 shapes: vec![[0; MAX_DIM]],
@@ -242,6 +254,15 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
                 TensorData { shapes, n_dims, name }
             }
             Mdl::Input([node, block_arg_number]) => x(node).clone(),
+            Mdl::Index([index, input]) => {
+                let index = *get_num(*index);
+                let input = x(input);
+                TensorData {
+                    shapes: vec![input.shapes[index as usize]],
+                    n_dims: vec![input.n_dims[index as usize]],
+                    name: None
+                }
+            }
             Mdl::MulOp([lhs, rhs]) => {
                 let lhs_dims = x(lhs);
                 let rhs_dims = x(rhs);
