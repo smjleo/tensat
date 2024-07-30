@@ -46,6 +46,7 @@ pub mod ffi {
         DynamicUpdateSliceOp,
         DynamicSliceOp,
         ScatterOp,
+        BlackBoxOp,
     }
 
     struct Node {
@@ -73,9 +74,9 @@ pub mod ffi {
             dims: &[i32],
         ) -> Box<TensorInfo>;
         fn new_index(
-            self: &mut CppGraphConverter, 
+            self: &mut CppGraphConverter,
             index: i32,
-            inpt: &TensorInfo
+            inpt: &TensorInfo,
         ) -> Box<TensorInfo>;
         fn new_compare_op(
             self: &mut CppGraphConverter,
@@ -300,9 +301,9 @@ pub mod ffi {
 pub struct CppGraphConverter {
     rec_expr: RecExpr<Mdl>,
     scalar_map: HashMap<i32, Id>,
-    scalar_map_inv: HashMap<Id, i32>,
     name_gen: NameGen,
     tensorinfo_map: HashMap<Id, TensorInfo>,
+    blackbox_cpp_num_to_tensorinfo: HashMap<i32, TensorInfo>,
 }
 
 pub fn new_converter() -> Box<CppGraphConverter> {
@@ -351,13 +352,18 @@ impl CppGraphConverter {
                 shapes: vec![inpt.tensor_data.shapes[index as usize]],
                 n_dims: vec![inpt.tensor_data.n_dims[index as usize]],
                 name: None,
-            }
+            },
         };
         self.tensorinfo_map.insert(res.id, res.clone());
         res
     }
 
-    pub fn blackbox(&mut self, inpts: &[&TensorInfo], cpp_num: i32, shapes: &[&[i32]]) -> TensorInfo {
+    pub fn blackbox(
+        &mut self,
+        inpts: &[&TensorInfo],
+        cpp_num: i32,
+        shapes: &[&[i32]],
+    ) -> TensorInfo {
         let cpp_num_node = self.add_or_get_val(cpp_num);
         let mut ids: Vec<Id> = inpts.iter().map(|inpt| inpt.id).collect();
         ids.push(cpp_num_node);
@@ -449,7 +455,12 @@ impl CppGraphConverter {
     }
 
     // needs to take in a variadic number of input tensors
-    pub fn reduce_op(&mut self, inpt: &TensorInfo, dimensions: &[i32], shapes: &[&[i32]]) -> TensorInfo {
+    pub fn reduce_op(
+        &mut self,
+        inpt: &TensorInfo,
+        dimensions: &[i32],
+        shapes: &[&[i32]],
+    ) -> TensorInfo {
         let dim_name = &dimensions.iter().join("_");
         let node = Mdl::Var(Symbol::from(dim_name));
         let dimensions_id = self.rec_expr.add(node);
@@ -956,7 +967,6 @@ impl CppGraphConverter {
                 let node = Mdl::Num(val);
                 let id = self.rec_expr.add(node);
                 self.scalar_map.insert(val, id);
-                self.scalar_map_inv.insert(id, val);
                 id
             }
         }
@@ -996,13 +1006,7 @@ impl CppGraphConverter {
         comparison_type: i32,
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.compare_op(
-            inpt_1,
-            inpt_2,
-            comparison_direction,
-            comparison_type,
-            shape,
-        ))
+        Box::new(self.compare_op(inpt_1, inpt_2, comparison_direction, comparison_type, shape))
     }
 
     pub fn new_broadcast_in_dim(
@@ -1262,19 +1266,6 @@ impl CppGraphConverter {
         Box::new(self.blackbox(&tensor_infos, cpp_num, shapes))
     }
 
-    // pub fn new_blackbox_1_op(&mut self, inpt: &TensorInfo, cpp_num: i32) -> Box<TensorInfo> {
-    //     Box::new(self.blackbox_1(*inpt, cpp_num))
-    // }
-    //
-    // pub fn new_blackbox_2_op(
-    //     &mut self,
-    //     inpt_1: &TensorInfo,
-    //     inpt_2: &TensorInfo,
-    //     cpp_num: i32,
-    // ) -> Box<TensorInfo> {
-    //     Box::new(self.blackbox_2(*inpt_1, *inpt_2, cpp_num))
-    // }
-
     pub fn print_rec_expr(&self) {
         println!("{:?}", self.rec_expr)
     }
@@ -1365,7 +1356,8 @@ impl CppGraphConverter {
         let pre_defined_rules = PRE_DEFINED_RULES.iter().map(|&x| x);
         let split_rules: Vec<&str> = learned_rules.split("\n").chain(pre_defined_rules).collect();
         let do_filter_after = no_cycle && filter_after;
-        let analysis = TensorAnalysis::new(&self.tensorinfo_map, &self.scalar_map_inv);
+        let analysis =
+            TensorAnalysis::new(&self.tensorinfo_map, &self.blackbox_cpp_num_to_tensorinfo);
         let runner = Runner::<Mdl, TensorAnalysis, ()>::new(analysis)
             .with_node_limit(node_limit)
             .with_time_limit(time_limit_sec)
