@@ -162,7 +162,7 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
     fn make(egraph: &EGraph<Mdl, Self>, enode: &Mdl) -> Self::Data {
         let x = |i: &Id| &egraph[*i].data;
 
-        fn convert_i32_slice_to_i64_slice(input: &[i32; 8]) -> &[i64] {
+        fn convert_i32_slice_to_i64_slice(input: &[i32]) -> &[i64] {
             let converted_slice: Box<[i64]> = input
                 .iter()
                 .filter(|&x| *x != 0)
@@ -505,33 +505,35 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
                     name: None,
                 }
             }
-            // Mdl::ConcatenateOp([inputs, axis]) => {
-            //     let arg_dims = get_vec(&egraph[*inputs])
-            //         .iter()
-            //         .map(|x| get_vec_of_nums(egraph, &egraph[*x]).as_slice())
-            //         .collect::<Vec<&[i32]>>();
-            //     let arg_types = arg_dims
-            //         .iter()
-            //         .map(|x| ffi::Type::f32)
-            //         .collect::<Vec<ffi::Type>>();
-            //     let axis_num = *get_num(*axis) as i64;
-            //     let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
-            //         ffi::Ops::ConcatenateOp,
-            //         &arg_dims
-            //             .iter()
-            //             .map(|x| x.iter().map(|y| *y as i64).collect::<Vec<i64>>())
-            //             .collect::(),
-            //         &arg_types,
-            //         &[],
-            //         &[axis_num],
-            //     );
-            //     let (shapes, n_dims) = shape_from_dim(shape_vec);
-            //     TensorData {
-            //         shapes,
-            //         n_dims,
-            //         name: None,
-            //     }
-            // }
+            Mdl::ConcatenateOp([inputs, axis_input_id]) => {
+                let arg_dims = get_vec(&egraph[*inputs])
+                    .iter()
+                    .map(|id| {
+                        let dims = x(id);
+                        convert_i32_slice_to_i64_slice(&dims.shapes[0])
+                    })
+                    .collect::<Vec<&[i64]>>();
+                let arg_types: Vec<ffi::Type> = vec![ffi::Type::f32; inputs.len()];
+                let axis_num = *get_num(*axis_input_id) as i64;
+
+                // Call shape inference function
+                let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+                    ffi::Ops::ConcatenateOp,
+                    &arg_dims,
+                    &arg_types,
+                    &[],
+                    &[axis_num],
+                );
+                // Extract shapes and number of dimensions
+                let (shapes, n_dims) = shape_from_dim(shape_vec);
+
+                // Create TensorData
+                TensorData {
+                    shapes,
+                    n_dims,
+                    name: None,
+                }
+            }
             x => {
                 println!("{:?}", x);
                 unimplemented!("Op unimplemented")
