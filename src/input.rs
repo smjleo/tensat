@@ -421,9 +421,7 @@ impl CppGraphConverter {
         dimensions: &[i32],
         shape: &[i32],
     ) -> TensorInfo {
-        let dim_name = &dimensions.iter().join("_");
-        let node = Mdl::Var(Symbol::from(dim_name));
-        let dimensions_id = self.rec_expr.add(node);
+        let dimensions_id = self.vec_node(dimensions);
         let new_node = Mdl::BroadcastInDimOp([inpt.id, dimensions_id]);
 
         let (shapes, n_dims) = self.shape_from_dim(&[shape]);
@@ -463,9 +461,7 @@ impl CppGraphConverter {
         dimensions: &[i32],
         shapes: &[&[i32]],
     ) -> TensorInfo {
-        let dim_name = &dimensions.iter().join("_");
-        let node = Mdl::Var(Symbol::from(dim_name));
-        let dimensions_id = self.rec_expr.add(node);
+        let dimensions_id = self.vec_node(dimensions);
         let new_node = Mdl::ReduceOp([inpt.id, dimensions_id]);
         let (shapes, n_dims) = self.shape_from_dim(shapes);
         let res = TensorInfo {
@@ -481,9 +477,7 @@ impl CppGraphConverter {
     }
 
     pub fn reshape_op(&mut self, inpt: &TensorInfo, shape: &[i32]) -> TensorInfo {
-        let shape_name = &shape.iter().join("_");
-        let node = Mdl::Var(Symbol::from(shape_name));
-        let shape_id = self.rec_expr.add(node);
+        let shape_id = self.vec_node(shape);
         let new_node = Mdl::ReshapeOp([inpt.id, shape_id]);
         let (shapes_new, n_dims) = self.shape_from_dim(&[shape]);
         let res = TensorInfo {
@@ -706,8 +700,6 @@ impl CppGraphConverter {
         permutation: &[i32],
         shape: &[i32],
     ) -> TensorInfo {
-        println!("INPUT PERMUTATION");
-        println!("{:?}", permutation);
         let permutation_id = self.vec_node(permutation);
         let new_node = Mdl::TransposeOp([inpt.id, permutation_id]);
         let (shapes, n_dims) = self.shape_from_dim(&[shape]);
@@ -1370,23 +1362,26 @@ impl CppGraphConverter {
 
         let mut custom_rules: Vec<Rewrite<Mdl, TensorAnalysis<'a>>> = vec![
             rewrite!("transpose-of-transpose";
-             "(TransposeOp (TransposeOp ?x ?p) ?p)" => "?x"
-             if decreasing_perm("?p")),
+                     "(TransposeOp (TransposeOp ?x ?p) ?p)" => "?x" if decreasing_perm("?p")),
             rewrite!("flatten-concat";
                      "(ConcatenateOp ?v ?d)" => { FlattenConcat {
-                vec: "?v".parse().unwrap(),
-                dim: "?d".parse().unwrap(),
+                     vec: "?v".parse().unwrap(),
+                     dim: "?d".parse().unwrap(),
             }}),
             rewrite!("merge-slices";
                      "(ConcatenateOp (Vec (SliceOp ?x ?s1 ?l1 ?s) (SliceOp ?x ?s2 ?l2 ?s)) ?d)" => { MergeSlices {
-                x: "?x".parse().unwrap(),
-                s1: "?s1".parse().unwrap(),
-                s2: "?s2".parse().unwrap(),
-                l1: "?l1".parse().unwrap(),
-                l2: "?l2".parse().unwrap(),
-                strides: "?s".parse().unwrap(),
-                dim: "?d".parse().unwrap()
+                     x: "?x".parse().unwrap(),
+                     s1: "?s1".parse().unwrap(),
+                     s2: "?s2".parse().unwrap(),
+                     l1: "?l1".parse().unwrap(),
+                     l2: "?l2".parse().unwrap(),
+                     strides: "?s".parse().unwrap(),
+                    dim: "?d".parse().unwrap()
             }}),
+            /* rewrite!("concat-dot";
+                     "(DotGeneralOp (ConcatenateOp (Vec ?a ?b) ?d1) (ConcatenateOp (Vec ?c ?d) ?d2) ?lb ?rb ?lc ?rc ?p)"
+                     => "(AddOp (DotGeneralOp ?a ?c ?lb ?rb ?lc ?rc ?p) (DotGeneralOp ?b ?d ?lb ?rb ?lc ?rc ?p))"
+                     if concat_dot_compatible("lc", "d1", "rc", "d2"))  // TODO: untested - awaiting shape inference */
         ];
 
         rules.append(&mut custom_rules);

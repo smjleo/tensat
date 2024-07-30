@@ -193,7 +193,7 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
 
         fn dim_from_name_string(name: &str) -> (Vec<[i32; MAX_DIM]>, Vec<usize>) {
             let name_vec: Vec<&str> = name.split("@").collect();
-            assert!(name_vec.len() == 2);
+            assert!(name_vec.len() == 2, "name: {}, len: {}", name, name_vec.len());
             let dims: Vec<i32> = name_vec[1]
                 .split("_")
                 .map(|x| x.parse::<i32>().unwrap())
