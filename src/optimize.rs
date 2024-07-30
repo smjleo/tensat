@@ -314,7 +314,7 @@ impl<'a> CostModel<'a> {
                 ) as f32
             }
             Mdl::IotaOp([iota_dimension, shape]) => 20.0,
-            Mdl::ConstantOp([]) => 1.0,
+            // Mdl::ConstantOp([]) => 1.0,
             Mdl::DynamicUpdateSliceOp([operand, update, start_indices]) => 3.0,
             Mdl::DynamicSliceOp([operand, start_indices, slice_sizes]) => 4.0,
             Mdl::ScatterOp([input, scatter_indices, updates, dimension_numbers]) => 6.0,

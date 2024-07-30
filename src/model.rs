@@ -59,7 +59,7 @@ define_language! {
       "ExpOp"              = ExpOp([Id; 1]), // input
       // MISC OPS
       "IotaOp"             = IotaOp([Id; 2]), // iota_dimension, output_shape
-      "ConstantOp"         = ConstantOp([Id; 0]),
+      // "ConstantOp"         = ConstantOp([Id; 0]),
       "DynamicUpdateSliceOp" = DynamicUpdateSliceOp([Id; 3]), // operand, update, start_indices
       "DynamicSliceOp"     = DynamicSliceOp([Id; 3]), // operand, start_indices, slice_sizes
       // Complete pain, has arity 12
@@ -156,7 +156,8 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
 
     /// Merges two metadata when two eclasses are merged.
     fn merge(&self, to: &mut Self::Data, from: Self::Data) -> bool {
-        to.shapes == from.shapes
+        assert!(to.shapes == from.shapes);
+        true
     }
 
     fn make(egraph: &EGraph<Mdl, Self>, enode: &Mdl) -> Self::Data {
