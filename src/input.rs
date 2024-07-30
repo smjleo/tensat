@@ -369,7 +369,6 @@ impl CppGraphConverter {
         cpp_num: i32,
         shapes: &Vec<ffi::Shape>,
     ) -> TensorInfo {
-        println!("blackbox called");
         let cpp_num_node = self.add_or_get_val(cpp_num);
         let mut ids: Vec<Id> = inpts.iter().map(|inpt| inpt.id).collect();
         ids.push(cpp_num_node);
