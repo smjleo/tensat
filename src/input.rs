@@ -381,6 +381,8 @@ impl CppGraphConverter {
             },
         };
         self.tensorinfo_map.insert(res.id, res.clone());
+        self.blackbox_cpp_num_to_tensorinfo
+            .insert(cpp_num, res.clone());
         res
     }
 
