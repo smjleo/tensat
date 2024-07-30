@@ -7,7 +7,10 @@ use rand;
 use std::convert::TryInto;
 use std::time::{Duration, Instant};
 use std::{collections::HashMap, collections::HashSet};
-use {crate::input::ffi::{self, Shape}, crate::rewrites::*};
+use {
+    crate::input::ffi::{self, Shape},
+    crate::rewrites::*,
+};
 
 use egg::*;
 
@@ -83,32 +86,23 @@ impl Default for DataKind {
     }
 }
 
-// /// Metadata struct for TensorAnalysis
-// #[derive(Debug, Clone)]
-// pub struct ValTnsr {
-//     // This is the cost of the op
-//     pub val: i32,
-//     pub cost: i32,
-// }
-
 pub const MAX_DIM: usize = 8;
 
 // Struct for storing shape and value-related metadata for tensors. This
 // is the base metadata struct that is used by Analysis as well.
 #[derive(Clone, Debug)]
 pub struct TensorData {
-    // In StableHLO, each operation can have multiple results (for 
+    // In StableHLO, each operation can have multiple results (for
     // example, see ScatterOp).
-    // 
-    // To handle this, we assume that all operations have multiple 
+    //
+    // To handle this, we assume that all operations have multiple
     // results, hence the Vecs below. We can access the i-th element of
-    // an operation x by using an Index node: (Index (Num i) x). 
+    // an operation x by using an Index node: (Index (Num i) x).
     // For an Index node, we simply store singleton Vecs for the two
-    // fields below. Then, we always take the 0-th result of any 
+    // fields below. Then, we always take the 0-th result of any
     // operation that appears as an operand. This allows us to omit
     // (Index 0) for the common case of using the only element in
     // the operation.
-
     /// Shapes of the tensor. We deal with tensor up to MAX_DIM dimensions.
     pub shapes: Vec<[i32; MAX_DIM]>,
     /// Number of dimensions of each result of this tensor
@@ -116,16 +110,6 @@ pub struct TensorData {
     /// The name string of this eclass if it is a Name type
     pub name: Option<&'static str>,
 }
-
-// impl Default for TensorData {
-//     fn default() -> Self {
-//         TensorData {
-//             shape: [50; 8],
-//             n_dim: 8,
-//             name: None,
-//         }
-//     }
-// }
 
 // Struct for storing information of a tensor. This is passed between functions
 // during graph creation.
@@ -149,21 +133,20 @@ pub struct TensorAnalysis<'a> {
     pub tensorinfo_map: &'a HashMap<Id, TensorInfo>,
     /// C++ FFI for shape inference using stablehlo
     pub cpp_shape_inference: cxx::UniquePtr<ffi::ShapeInference>, // Holding the C++ cost model
-    /// for mapping Num nodes back to their values
-    pub scalar_map: &'a HashMap<Id, i32>,
+    pub blackbox_cpp_num_to_shape: &'a HashMap<i32, TensorInfo>,
 }
 
 impl<'a> TensorAnalysis<'a> {
     pub fn new<'b: 'a>(
         tensorinfo_map: &'b HashMap<Id, TensorInfo>,
-        scalar_map: &'b HashMap<Id, i32>,
+        blackbox_cpp_num_to_shape: &'b HashMap<i32, TensorInfo>,
     ) -> Self {
         TensorAnalysis {
             blacklist_nodes: HashSet::<Mdl>::new(),
             newly_added: Vec::<Mdl>::new(),
             tensorinfo_map,
             cpp_shape_inference: ffi::newShapeInference(),
-            scalar_map,
+            blackbox_cpp_num_to_shape,
         }
     }
 }
@@ -215,7 +198,7 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
                 .split("_")
                 .map(|x| x.parse::<i32>().unwrap())
                 .collect();
-            shape_from_dim(vec![Shape {shape: dims}])
+            shape_from_dim(vec![Shape { shape: dims }])
         };
 
         fn print_joined_with_underscore(numbers: &Vec<i32>) {
@@ -234,7 +217,7 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
         let get_num = |id| {
             for node in egraph[id].iter() {
                 match node {
-                    Mdl::Num(x) => { return x }
+                    Mdl::Num(x) => return x,
                     _ => {}
                 }
             }
@@ -251,7 +234,11 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
             Mdl::Var(name) => {
                 let (shapes, n_dims) = dim_from_name_string(name.as_str());
                 let name = Some(name.as_str());
-                TensorData { shapes, n_dims, name }
+                TensorData {
+                    shapes,
+                    n_dims,
+                    name,
+                }
             }
             Mdl::Input([node, block_arg_number]) => x(node).clone(),
             Mdl::Index([index, input]) => {
@@ -260,7 +247,7 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
                 TensorData {
                     shapes: vec![input.shapes[index as usize]],
                     n_dims: vec![input.n_dims[index as usize]],
-                    name: None
+                    name: None,
                 }
             }
             Mdl::MulOp([lhs, rhs]) => {
@@ -499,6 +486,52 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
                     name: None,
                 }
             }
+            Mdl::BlackBox(inputs) => {
+                let cpp_num = get_num(
+                    *inputs
+                        .last()
+                        .expect("Tried to call make() on a BlackBox without TensorData"),
+                );
+                let shape_vec = egraph.analysis.blackbox_cpp_num_to_shape[cpp_num]
+                    .tensor_data
+                    .shapes
+                    .iter()
+                    .map(|x| Shape { shape: x.to_vec() })
+                    .collect::<Vec<Shape>>();
+                let (shapes, n_dims) = shape_from_dim(shape_vec);
+                TensorData {
+                    shapes,
+                    n_dims,
+                    name: None,
+                }
+            }
+            // Mdl::ConcatenateOp([inputs, axis]) => {
+            //     let arg_dims = get_vec(&egraph[*inputs])
+            //         .iter()
+            //         .map(|x| get_vec_of_nums(egraph, &egraph[*x]).as_slice())
+            //         .collect::<Vec<&[i32]>>();
+            //     let arg_types = arg_dims
+            //         .iter()
+            //         .map(|x| ffi::Type::f32)
+            //         .collect::<Vec<ffi::Type>>();
+            //     let axis_num = *get_num(*axis) as i64;
+            //     let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+            //         ffi::Ops::ConcatenateOp,
+            //         &arg_dims
+            //             .iter()
+            //             .map(|x| x.iter().map(|y| *y as i64).collect::<Vec<i64>>())
+            //             .collect::(),
+            //         &arg_types,
+            //         &[],
+            //         &[axis_num],
+            //     );
+            //     let (shapes, n_dims) = shape_from_dim(shape_vec);
+            //     TensorData {
+            //         shapes,
+            //         n_dims,
+            //         name: None,
+            //     }
+            // }
             x => {
                 println!("{:?}", x);
                 unimplemented!("Op unimplemented")
