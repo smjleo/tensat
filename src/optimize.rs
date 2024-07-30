@@ -37,8 +37,7 @@ impl<'a> CostModel<'a> {
     }
 
     pub fn tensor_data_to_shape_vec(&self, tensor_data: &TensorData) -> Vec<i64> {
-        tensor_data
-            .shapes[0]
+        tensor_data.shapes[0]
             .iter()
             .filter(|&x| *x != 0)
             .map(|&x| x as i64)
@@ -109,7 +108,12 @@ impl<'a> CostModel<'a> {
         };
         match enode {
             // NO REWRITES APPLY TO THESE SO THEY CAN HAVE ARBITRARY COST
-            Mdl::Num(_) | Mdl::Var(_) | Mdl::Input(_) | Mdl::Vec(_) | Mdl::BlackBox(_) | Mdl::Index(_) => 0.0,
+            Mdl::Num(_)
+            | Mdl::Var(_)
+            | Mdl::Input(_)
+            | Mdl::Vec(_)
+            | Mdl::BlackBox(_)
+            | Mdl::Index(_) => 0.0,
             Mdl::CompareOp([input1, input2, comparison_direction, comparison_type]) => 0.0,
             Mdl::BroadcastInDimOp([input, broadcast_dimension]) => 0.0,
             Mdl::ConvertOp([input, output_type]) => 0.0,
@@ -158,11 +162,26 @@ impl<'a> CostModel<'a> {
                     &[],
                 ) as f32
             }
-            Mdl::ConcatenateOp([inputs, dimension]) => 10.0,
-            // {
-            //     let inputs_as_shape_vecs = get_vec(&egraph[*inputs]);
-            //     let dimension_as_i32 = get_num(&egraph[*dimension]);
-            // }
+            Mdl::ConcatenateOp([inputs, axis_input_id]) => {
+                let arg_dims = get_vec(&egraph[*inputs])
+                    .iter()
+                    .map(|id| {
+                        let dims = x(id);
+                        convert_i32_slice_to_i64_slice(&dims.shapes[0])
+                    })
+                    .collect::<Vec<&[i64]>>();
+                let arg_types: Vec<ffi::Type> = vec![ffi::Type::f32; inputs.len()];
+                let axis_num = *get_num(&egraph[*axis_input_id]) as i64;
+
+                // Call shape inference function
+                self.cpp_cost_model.get_cost(
+                    ffi::Ops::ConcatenateOp,
+                    &arg_dims,
+                    &arg_types,
+                    &[],
+                    &[axis_num],
+                ) as f32
+            }
             Mdl::PadOp(
                 [input, padding_value, edge_padding_low, edge_padding_high, interior_padding],
             ) => 100.0,
