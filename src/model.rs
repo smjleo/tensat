@@ -157,7 +157,7 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
     /// Merges two metadata when two eclasses are merged.
     fn merge(&self, to: &mut Self::Data, from: Self::Data) -> bool {
         assert!(to.shapes == from.shapes);
-        true
+        false
     }
 
     fn make(egraph: &EGraph<Mdl, Self>, enode: &Mdl) -> Self::Data {
@@ -529,6 +529,24 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
                 let (shapes, n_dims) = shape_from_dim(shape_vec);
 
                 // Create TensorData
+                TensorData {
+                    shapes,
+                    n_dims,
+                    name: None,
+                }
+            }
+            Mdl::ExpOp([input]) => {
+                let input_dims = x(input);
+                let arg_dims = [convert_i32_slice_to_i64_slice(&input_dims.shapes[0])];
+                let arg_types = [ffi::Type::f32];
+                let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+                    ffi::Ops::ExpOp,
+                    &arg_dims,
+                    &arg_types,
+                    &[],
+                    &[],
+                );
+                let (shapes, n_dims) = shape_from_dim(shape_vec);
                 TensorData {
                     shapes,
                     n_dims,
