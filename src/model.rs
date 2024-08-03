@@ -64,6 +64,7 @@ define_language! {
       "DynamicSliceOp"     = DynamicSliceOp([Id; 3]), // operand, start_indices, slice_sizes
       // Complete pain, has arity 12
       "ScatterOp"          = ScatterOp([Id; 4]), // input, scatter_indices, updates, dimension_numbers
+       "ReturnOp"            = ReturnOp([Id; 1]),
        "BlackBox"           = BlackBox(Box<[Id]>),
        "Vec"                = Vec(Vec<Id>),
        "Index"              = Index([Id; 2]),
@@ -124,34 +125,34 @@ pub struct TensorInfo {
 /// In this analysis, it calls functions on the TASO side (e.g. graph.matmul())
 /// to create (or get) new ops/nodes and stores pointers to the output tensors.
 /// TASO will measure and store the runtime cost when creating a new op/node.
-pub struct TensorAnalysis<'a> {
+pub struct TensorAnalysis {
     /// Record blacklisted nodes for filtering cycles
     pub blacklist_nodes: HashSet<Mdl>,
     /// Newly added nodes by order
     pub newly_added: Vec<Mdl>,
     /// Tracking TensorInfo for C++-originating ops
-    pub tensorinfo_map: &'a HashMap<Id, TensorInfo>,
+    pub tensorinfo_map: HashMap<Id, TensorInfo>,
     /// C++ FFI for shape inference using stablehlo
     pub cpp_shape_inference: cxx::UniquePtr<ffi::ShapeInference>, // Holding the C++ cost model
-    pub blackbox_cpp_num_to_shape: &'a HashMap<i32, TensorInfo>,
+    pub blackbox_cpp_num_to_shape: HashMap<i32, TensorInfo>,
 }
 
-impl<'a> TensorAnalysis<'a> {
-    pub fn new<'b: 'a>(
-        tensorinfo_map: &'b HashMap<Id, TensorInfo>,
-        blackbox_cpp_num_to_shape: &'b HashMap<i32, TensorInfo>,
+impl<'a> TensorAnalysis {
+    pub fn new(
+        tensorinfo_map: &HashMap<Id, TensorInfo>,
+        blackbox_cpp_num_to_shape: &HashMap<i32, TensorInfo>,
     ) -> Self {
         TensorAnalysis {
             blacklist_nodes: HashSet::<Mdl>::new(),
             newly_added: Vec::<Mdl>::new(),
-            tensorinfo_map,
+            tensorinfo_map: tensorinfo_map.clone(),
             cpp_shape_inference: ffi::newShapeInference(),
-            blackbox_cpp_num_to_shape,
+            blackbox_cpp_num_to_shape: blackbox_cpp_num_to_shape.clone(),
         }
     }
 }
 
-impl Analysis<Mdl> for TensorAnalysis<'_> {
+impl Analysis<Mdl> for TensorAnalysis {
     type Data = TensorData;
 
     /// Merges two metadata when two eclasses are merged.
@@ -409,8 +410,6 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
                 let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shapes[0])];
                 let arg_types = [ffi::Type::f32];
                 let permutation_vec = get_vec_of_nums(egraph, &egraph[*permutation]);
-                println!("SHAPE INFERENFCE PERMUTATION");
-                println!("{:?}", permutation_vec);
                 let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
                     ffi::Ops::TransposeOp,
                     &arg_dims,
@@ -506,6 +505,13 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
                     name: None,
                 }
             }
+            Mdl::ReturnOp(_) => {
+                TensorData {
+                    shapes: vec![],
+                    n_dims: vec![],
+                    name: None,
+                }
+            }
             Mdl::ConcatenateOp([inputs, axis_input_id]) => {
                 let arg_dims = get_vec(&egraph[*inputs])
                     .iter()
@@ -514,9 +520,8 @@ impl Analysis<Mdl> for TensorAnalysis<'_> {
                         convert_i32_slice_to_i64_slice(&dims.shapes[0])
                     })
                     .collect::<Vec<&[i64]>>();
-                let arg_types: Vec<ffi::Type> = vec![ffi::Type::f32; inputs.len()];
+                let arg_types: Vec<ffi::Type> = vec![ffi::Type::f32; arg_dims.len()];
                 let axis_num = *get_num(*axis_input_id) as i64;
-
                 // Call shape inference function
                 let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
                     ffi::Ops::ConcatenateOp,

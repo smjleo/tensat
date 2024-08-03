@@ -190,7 +190,7 @@ fn make_vec(egraph: &mut EGraph<Mdl, TensorAnalysis>, seq: &[Id]) -> Id {
 
 pub fn decreasing_perm<'a>(
     var: &'a str,
-) -> impl Fn(&mut EGraph<Mdl, TensorAnalysis<'_>>, Id, &Subst) -> bool + 'a {
+) -> impl Fn(&mut EGraph<Mdl, TensorAnalysis>, Id, &Subst) -> bool + 'a {
     let var = var.parse().unwrap();
     move |egraph, _, subst: &Subst| {
         let eclass = &egraph[subst[var]];
@@ -234,16 +234,15 @@ pub fn concat_dot_compatible(lc: &'static str, d1: &'static str, rc: &'static st
         let d2 = &subst[d2];
 
         lc.contains(d1) && rc.contains(d2)
-     }
+    }
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FlattenConcat {
     pub vec: Var,
     pub dim: Var,
 }
 
-impl Applier<Mdl, TensorAnalysis<'_>> for FlattenConcat {
+impl Applier<Mdl, TensorAnalysis> for FlattenConcat {
     fn apply_one(
         &self,
         egraph: &mut EGraph<Mdl, TensorAnalysis>,
@@ -300,7 +299,7 @@ pub struct MergeSlices {
     pub dim: Var,
 }
 
-impl Applier<Mdl, TensorAnalysis<'_>> for MergeSlices {
+impl Applier<Mdl, TensorAnalysis> for MergeSlices {
     fn apply_one(
         &self,
         egraph: &mut EGraph<Mdl, TensorAnalysis>,
@@ -390,7 +389,7 @@ struct CheckApply {
     filter_after: bool,
 }
 
-impl Applier<Mdl, TensorAnalysis<'_>> for CheckApply {
+impl Applier<Mdl, TensorAnalysis> for CheckApply {
     /// Apply the pattern once. Check the new nodes are valid before actually
     /// apply. See Applier trait in egg for more information.
     fn apply_one(

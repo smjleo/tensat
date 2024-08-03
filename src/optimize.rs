@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 
 /// Wrapper class for egg's cost function
 pub struct TensorCost<'a> {
-    pub egraph: &'a EGraph<Mdl, TensorAnalysis<'a>>,
-    pub cost_model: &'a CostModel<'a>,
+    pub egraph: &'a EGraph<Mdl, TensorAnalysis>,
+    pub cost_model: &'a CostModel,
 }
 
 impl CostFunction<Mdl> for TensorCost<'_> {
@@ -23,16 +23,16 @@ impl CostFunction<Mdl> for TensorCost<'_> {
 }
 
 /// Class for our cost model
-pub struct CostModel<'a> {
+pub struct CostModel {
     cpp_cost_model: cxx::UniquePtr<ffi::CostModel>, // Holding the C++ cost model
-    tensorinfo_map: &'a HashMap<Id, TensorInfo>,    // is this lifetime correct lol
+    // tensorinfo_map: &'a HashMap<Id, TensorInfo>,    // is this lifetime correct lol
 }
 
-impl<'a> CostModel<'a> {
-    pub fn new(tensorinfo_map: &'a HashMap<Id, TensorInfo>) -> Self {
+impl CostModel {
+    pub fn new(/* tensorinfo_map: &'a HashMap<Id, TensorInfo> */) -> Self {
         Self {
             cpp_cost_model: ffi::newCostModel(),
-            tensorinfo_map,
+            // tensorinfo_map,
         }
     }
 
@@ -113,7 +113,8 @@ impl<'a> CostModel<'a> {
             | Mdl::Input(_)
             | Mdl::Vec(_)
             | Mdl::BlackBox(_)
-            | Mdl::Index(_) => 0.0,
+            | Mdl::Index(_) 
+            | Mdl::ReturnOp(_) => 0.0,
             Mdl::CompareOp([input1, input2, comparison_direction, comparison_type]) => 0.0,
             Mdl::BroadcastInDimOp([input, broadcast_dimension]) => 0.0,
             Mdl::ConvertOp([input, output_type]) => 0.0,

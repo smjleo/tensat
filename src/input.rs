@@ -47,6 +47,7 @@ pub mod ffi {
         DynamicSliceOp,
         ScatterOp,
         BlackBoxOp,
+        ReturnOp,
     }
 
     struct Node {
@@ -260,6 +261,10 @@ pub mod ffi {
             cpp_num: i32,
             shapes: &Vec<Shape>,
         ) -> Box<TensorInfo>;
+        fn new_return_op(
+            self: &mut CppGraphConverter,
+            inpts: &[*mut TensorInfo],
+        ) -> Box<TensorInfo>;
         fn optimize(self: &CppGraphConverter) -> Vec<Node>;
         fn print_rec_expr(self: &CppGraphConverter);
         fn pretty_print_rec_expr(self: &CppGraphConverter, width: i32);
@@ -388,6 +393,25 @@ impl CppGraphConverter {
         self.tensorinfo_map.insert(res.id, res.clone());
         self.blackbox_cpp_num_to_tensorinfo
             .insert(cpp_num, res.clone());
+        res
+    }
+
+    pub fn return_op(
+        &mut self,
+        inpts: &[&TensorInfo],
+    ) -> TensorInfo {
+        let inputs_node = Mdl::Vec(inpts.iter().map(|i| i.id).collect());
+        let inputs_id = self.rec_expr.add(inputs_node);
+        let new_node = Mdl::ReturnOp([inputs_id]);
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes: vec![],
+                n_dims: vec![],
+                name: None,
+            },
+        };
+        self.tensorinfo_map.insert(res.id, res.clone());
         res
     }
 
@@ -1274,6 +1298,14 @@ impl CppGraphConverter {
         Box::new(self.blackbox(&tensor_infos, cpp_num, shapes))
     }
 
+    pub fn new_return_op(
+        &mut self,
+        inpts: &[*mut TensorInfo],
+    ) -> Box<TensorInfo> {
+        let tensor_infos: Vec<&TensorInfo> = inpts.iter().map(|&ptr| unsafe { &*ptr }).collect();
+        Box::new(self.return_op(&tensor_infos))        
+    }
+
     pub fn print_rec_expr(&self) {
         println!("{:?}", self.rec_expr)
     }
@@ -1332,6 +1364,7 @@ impl CppGraphConverter {
                 Mdl::TanhOp(ops) => new_node("TanhOp", ops),
                 Mdl::ExpOp(ops) => new_node("ExpOp", ops),
                 Mdl::IotaOp(ops) => new_node("IotaOp", ops),
+                Mdl::ReturnOp(ops) => new_node("ReturnOp", ops),
                 Mdl::BlackBox(ops) => new_node("blackbox", ops),
                 _ => unimplemented!(),
             };
@@ -1346,7 +1379,7 @@ impl CppGraphConverter {
         let start = &self.rec_expr;
 
         // Configuration
-        let n_sec = 60; // seconds for timeout
+        let n_sec = 30; // seconds for timeout
         let use_multi = false; // whether to use multi patterns
         let no_cycle = false; // is our graph by definition acyclic?
         let filter_after = false; // vanilla filtering or efficient filtering
@@ -1357,9 +1390,8 @@ impl CppGraphConverter {
         println!("The current directory is {}", path.display());
         let rule_file = "src/enzyme_ad/jax/deps/tensat/converted.txt";
 
-        let learned_rules_str =
+        let learned_rules =
             read_to_string(rule_file).expect("Something went wrong reading the rule file");
-        let learned_rules: &'a str = Box::leak(learned_rules_str.into_boxed_str());
         let time_limit_sec = Duration::new(n_sec, 0);
         let pre_defined_rules = PRE_DEFINED_RULES.iter().map(|&x| x);
         let split_rules: Vec<&str> = learned_rules.split("\n").chain(pre_defined_rules).collect();
@@ -1374,7 +1406,7 @@ impl CppGraphConverter {
         // .with_hook(move |runner| multi_patterns.run_one(runner));
         let mut rules = rules_from_str(split_rules, do_filter_after);
 
-        let mut custom_rules: Vec<Rewrite<Mdl, TensorAnalysis<'a>>> = vec![
+        let mut custom_rules: Vec<Rewrite<Mdl, TensorAnalysis>> = vec![
             rewrite!("transpose-of-transpose";
                      "(TransposeOp (TransposeOp ?x ?p) ?p)" => "?x" if decreasing_perm("?p")),
             rewrite!("flatten-concat";
@@ -1436,14 +1468,37 @@ impl CppGraphConverter {
         println!("  Average nodes per class: {}", avg_nodes_per_class);
         println!("  Number of edges: {}", num_edges);
         println!("  Number of programs: {}", num_programs);
-
+            
         let (egraph, root) = (runner.egraph, runner.roots[0]);
-        let cost_model = CostModel::new(&self.tensorinfo_map);
+        let cost_model: CostModel = CostModel::new();
         let (best, ext_secs) = extract_by_ilp(&egraph, root, &cost_model);
-        println!("{}", best);
-
+        // let (best, ext_secs) = extract_by_greedy(&egraph, root, &cost_model);
+        
+        // println!("{}", best);
         self.convert_to_node(best)
     }
+}
+
+fn extract_by_greedy(
+    egraph: &EGraph<Mdl, TensorAnalysis>,
+    root: Id,
+    cost_model: &CostModel,
+) -> (RecExpr<Mdl>, f32) {
+    let tnsr_cost = TensorCost {
+        egraph,
+        cost_model,
+    };
+    let start_time = Instant::now();
+    let mut extractor = Extractor::new(egraph, tnsr_cost);
+    let (best_cost, best) = extractor.find_best(root);
+    let duration = start_time.elapsed();
+
+    println!("Extractor complete!");
+    println!("  Time taken: {:?}", duration);
+    println!("  Best cost: {:?}", best_cost);
+    let ext_secs = duration.as_secs_f32();
+
+    (best, ext_secs)
 }
 
 fn extract_by_ilp(
