@@ -276,9 +276,9 @@ pub mod ffi {
         fn get_cost(
             self: &CostModel,
             op: Ops,
-            operand_dims: &[&[i64]],
+            operand_dims: &[Vec<i64>],
             operands_types: &[Type],
-            other_vector_args: &[&[i64]],
+            other_vector_args: &[Vec<i64>],
             int_args: &[i64],
         ) -> u64;
 
@@ -292,9 +292,9 @@ pub mod ffi {
         fn get_shape(
             self: &ShapeInference,
             op: Ops,
-            operand_dims: &[&[i64]],
+            operand_dims: &[Vec<i64>],
             operands_types: &[Type],
-            other_vector_args: &[&[i64]],
+            other_vector_args: &[Vec<i64>],
             int_args: &[i64],
         ) -> Vec<Shape>;
 

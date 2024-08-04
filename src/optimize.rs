@@ -62,15 +62,12 @@ impl CostModel {
     pub fn get_self_cost(&self, egraph: &EGraph<Mdl, TensorAnalysis>, enode: &Mdl) -> f32 {
         let x = |i: &Id| &egraph[*i].data;
 
-        fn convert_i32_slice_to_i64_slice(input: &[i32; 8]) -> &[i64] {
-            let converted_slice: Box<[i64]> = input
+        fn dim_to_i64_vec(input: &[i32; MAX_DIM]) -> Vec<i64> {
+            input
                 .iter()
                 .filter(|&x| *x != 0)
                 .map(|x| *x as i64)
                 .collect::<Vec<i64>>()
-                .into_boxed_slice();
-
-            Box::leak(converted_slice)
         }
 
         fn shape_from_dim(dims: Vec<i32>) -> ([i32; MAX_DIM], usize) {
@@ -121,14 +118,14 @@ impl CostModel {
             Mdl::ReduceOp([input, init_values]) => 0.0,
             Mdl::ReshapeOp([operand, shape]) => {
                 let operand_dims = x(operand);
-                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shapes[0])];
+                let arg_dims = [dim_to_i64_vec(&operand_dims.shapes[0])];
                 let arg_types = [ffi::Type::f32];
                 let shape_vec = get_vec_of_nums(egraph, &egraph[*shape]);
                 self.cpp_cost_model.get_cost(
                     ffi::Ops::ReshapeOp,
                     &arg_dims,
                     &arg_types,
-                    &[map_to_i64(shape_vec).as_slice()],
+                    &[map_to_i64(shape_vec)],
                     &[],
                 ) as f32
             }
@@ -150,15 +147,15 @@ impl CostModel {
                 let shape_vec = get_vec_of_nums(egraph, &egraph[*shape]);
                 self.cpp_cost_model.get_cost(
                     ffi::Ops::DotGeneralOp,
-                    &[&lhs_dims, &rhs_dims],
+                    &[lhs_dims, rhs_dims],
                     &arg_types,
                     &[
-                        map_to_i64(lhs_batch_dim_vec).as_slice(),
-                        map_to_i64(rhs_batch_dim_vec).as_slice(),
-                        map_to_i64(lhs_contract_dim_vec).as_slice(),
-                        map_to_i64(rhs_contract_dim_vec).as_slice(),
-                        map_to_i64(precision_config_vec).as_slice(),
-                        map_to_i64(shape_vec).as_slice(),
+                        map_to_i64(lhs_batch_dim_vec),
+                        map_to_i64(rhs_batch_dim_vec),
+                        map_to_i64(lhs_contract_dim_vec),
+                        map_to_i64(rhs_contract_dim_vec),
+                        map_to_i64(precision_config_vec),
+                        map_to_i64(shape_vec),
                     ],
                     &[],
                 ) as f32
@@ -168,9 +165,9 @@ impl CostModel {
                     .iter()
                     .map(|id| {
                         let dims = x(id);
-                        convert_i32_slice_to_i64_slice(&dims.shapes[0])
+                        dim_to_i64_vec(&dims.shapes[0])
                     })
-                    .collect::<Vec<&[i64]>>();
+                    .collect::<Vec<Vec<i64>>>();
                 let arg_types: Vec<ffi::Type> = vec![ffi::Type::f32; inputs.len()];
                 let axis_num = *get_num(&egraph[*axis_input_id]) as i64;
 
@@ -188,7 +185,7 @@ impl CostModel {
             ) => 100.0,
             Mdl::SliceOp([input, start_indices, limit_indices, strides]) => {
                 let operand_dims = x(input);
-                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shapes[0])];
+                let arg_dims = [dim_to_i64_vec(&operand_dims.shapes[0])];
                 let arg_types = [ffi::Type::f32];
                 let start_indices_vec = get_vec_of_nums(egraph, &egraph[*start_indices]);
                 let limit_indices_vec = get_vec_of_nums(egraph, &egraph[*limit_indices]);
@@ -198,23 +195,23 @@ impl CostModel {
                     &arg_dims,
                     &arg_types,
                     &[
-                        map_to_i64(start_indices_vec).as_slice(),
-                        map_to_i64(limit_indices_vec).as_slice(),
-                        map_to_i64(strides_vec).as_slice(),
+                        map_to_i64(start_indices_vec),
+                        map_to_i64(limit_indices_vec),
+                        map_to_i64(strides_vec),
                     ],
                     &[],
                 ) as f32
             }
             Mdl::TransposeOp([operand, permutation]) => {
                 let operand_dims = x(operand);
-                let arg_dims = [convert_i32_slice_to_i64_slice(&operand_dims.shapes[0])];
+                let arg_dims = [dim_to_i64_vec(&operand_dims.shapes[0])];
                 let arg_types = [ffi::Type::f32];
                 let permutation_vec = get_vec_of_nums(egraph, &egraph[*permutation]);
                 self.cpp_cost_model.get_cost(
                     ffi::Ops::TransposeOp,
                     &arg_dims,
                     &arg_types,
-                    &[map_to_i64(permutation_vec).as_slice()],
+                    &[map_to_i64(permutation_vec)],
                     &[],
                 ) as f32
             }
@@ -223,7 +220,7 @@ impl CostModel {
                 let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
                 self.cpp_cost_model.get_cost(
                     ffi::Ops::MulOp,
-                    &[&lhs_dims, &rhs_dims],
+                    &[lhs_dims, rhs_dims],
                     &[ffi::Type::f32, ffi::Type::f32],
                     &[],
                     &[],
@@ -234,7 +231,7 @@ impl CostModel {
                 let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
                 self.cpp_cost_model.get_cost(
                     ffi::Ops::AddOp,
-                    &[&lhs_dims, &rhs_dims],
+                    &[lhs_dims, rhs_dims],
                     &[ffi::Type::f32, ffi::Type::f32],
                     &[],
                     &[],
@@ -245,7 +242,7 @@ impl CostModel {
                 let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
                 self.cpp_cost_model.get_cost(
                     ffi::Ops::DivOp,
-                    &[&lhs_dims, &rhs_dims],
+                    &[lhs_dims, rhs_dims],
                     &[ffi::Type::f32, ffi::Type::f32],
                     &[],
                     &[],
@@ -256,7 +253,7 @@ impl CostModel {
                 let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
                 self.cpp_cost_model.get_cost(
                     ffi::Ops::SubtractOp,
-                    &[&lhs_dims, &rhs_dims],
+                    &[lhs_dims, rhs_dims],
                     &[ffi::Type::f32, ffi::Type::f32],
                     &[],
                     &[],
@@ -267,7 +264,7 @@ impl CostModel {
                 let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
                 self.cpp_cost_model.get_cost(
                     ffi::Ops::MinOp,
-                    &[&lhs_dims, &rhs_dims],
+                    &[lhs_dims, rhs_dims],
                     &[ffi::Type::f32, ffi::Type::f32],
                     &[],
                     &[],
@@ -278,7 +275,7 @@ impl CostModel {
                 let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
                 self.cpp_cost_model.get_cost(
                     ffi::Ops::MaxOp,
-                    &[&lhs_dims, &rhs_dims],
+                    &[lhs_dims, rhs_dims],
                     &[ffi::Type::f32, ffi::Type::f32],
                     &[],
                     &[],
@@ -288,7 +285,7 @@ impl CostModel {
                 let operand_dims = self.tensor_data_to_shape_vec(x(operand));
                 self.cpp_cost_model.get_cost(
                     ffi::Ops::NegOp,
-                    &[&operand_dims],
+                    &[operand_dims],
                     &[ffi::Type::f32],
                     &[],
                     &[],
@@ -298,7 +295,7 @@ impl CostModel {
                 let operand_dims = self.tensor_data_to_shape_vec(x(operand));
                 self.cpp_cost_model.get_cost(
                     ffi::Ops::TanhOp,
-                    &[&operand_dims],
+                    &[operand_dims],
                     &[ffi::Type::f32],
                     &[],
                     &[],
@@ -308,7 +305,7 @@ impl CostModel {
                 let operand_dims = self.tensor_data_to_shape_vec(x(operand));
                 self.cpp_cost_model.get_cost(
                     ffi::Ops::ExpOp,
-                    &[&operand_dims],
+                    &[operand_dims],
                     &[ffi::Type::f32],
                     &[],
                     &[],
