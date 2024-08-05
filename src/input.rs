@@ -58,12 +58,12 @@ pub mod ffi {
 
     // CXX won't let me construct a Vec<Vec<i32>>, so we use Vec<ffi::Shape> instead
     // TODO: We should replace all the &[i32]s we see in Rust ffi function arguments
-    // to Vec<Shape> or similar. rust::Slice in CXX is quite error prone, because 
+    // to Vec<Shape> or similar. rust::Slice in CXX is quite error prone, because
     // a common pattern is to create a std::vector then create a slice out of it,
     // but the data is easily corrupted by the vector going out of scope.
     #[derive(Debug)]
     struct Shape {
-        shape: Vec<i32>,
+        shape: Vec<i64>,
     }
 
     // take floats from c++ and wrap them into f32s below
@@ -276,10 +276,10 @@ pub mod ffi {
         fn get_cost(
             self: &CostModel,
             op: Ops,
-            operand_dims: &[Vec<i64>],
-            operands_types: &[Type],
-            other_vector_args: &[Vec<i64>],
-            int_args: &[i64],
+            operand_dims: Vec<Shape>,
+            operands_types: Vec<Type>,
+            other_vector_args: Vec<Shape>, // These are not shapes..
+            int_args: Vec<i64>,
         ) -> u64;
 
         fn newCostModel() -> UniquePtr<CostModel>;
@@ -292,10 +292,10 @@ pub mod ffi {
         fn get_shape(
             self: &ShapeInference,
             op: Ops,
-            operand_dims: &[Vec<i64>],
-            operands_types: &[Type],
-            other_vector_args: &[Vec<i64>],
-            int_args: &[i64],
+            operand_dims: Vec<Shape>,
+            operands_types: Vec<Type>,
+            other_vector_args: Vec<Shape>, // These are not shapes..
+            int_args: Vec<i64>,
         ) -> Vec<Shape>;
 
         fn newShapeInference() -> UniquePtr<ShapeInference>;
@@ -396,10 +396,7 @@ impl CppGraphConverter {
         res
     }
 
-    pub fn return_op(
-        &mut self,
-        inpts: &[&TensorInfo],
-    ) -> TensorInfo {
+    pub fn return_op(&mut self, inpts: &[&TensorInfo]) -> TensorInfo {
         let inputs_node = Mdl::Vec(inpts.iter().map(|i| i.id).collect());
         let inputs_id = self.rec_expr.add(inputs_node);
         let new_node = Mdl::ReturnOp([inputs_id]);
@@ -431,7 +428,7 @@ impl CppGraphConverter {
             comparison_direction_node,
             comparison_type_node,
         ]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));;
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
             tensor_data: TensorData {
@@ -453,7 +450,7 @@ impl CppGraphConverter {
         let dimensions_id = self.vec_node(dimensions);
         let new_node = Mdl::BroadcastInDimOp([inpt.id, dimensions_id]);
 
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));;
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
             tensor_data: TensorData {
@@ -470,7 +467,7 @@ impl CppGraphConverter {
     pub fn convert_op(&mut self, inpt: &TensorInfo, output_type: i32, shape: &[i32]) -> TensorInfo {
         let output_type_node = self.add_or_get_val(output_type);
         let new_node = Mdl::ConvertOp([inpt.id, output_type_node]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));;
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
             tensor_data: TensorData {
@@ -896,7 +893,7 @@ impl CppGraphConverter {
         res
     }
 
-    /* 
+    /*
     pub fn constant_op(&mut self, shape: &[i32]) -> TensorInfo {
         let new_node = Mdl::ConstantOp([]);
         let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
@@ -998,7 +995,9 @@ impl CppGraphConverter {
     }
 
     fn single_shape_vec(&self, vec: &[i32]) -> Vec<ffi::Shape> {
-        vec![ffi::Shape {shape: vec.to_vec()}]
+        vec![ffi::Shape {
+            shape: vec.to_vec().iter().map(|x| *x as i64).collect(),
+        }]
     }
 
     fn shape_from_dim(&self, dims: &Vec<ffi::Shape>) -> (Vec<[i32; MAX_DIM]>, Vec<usize>) {
@@ -1011,7 +1010,7 @@ impl CppGraphConverter {
             }
             let mut shape = [0; MAX_DIM];
             for (i, dim) in dims.iter().enumerate() {
-                shape[i] = *dim;
+                shape[i] = *dim as i32;
             }
             shapes.push(shape);
             n_dims.push(dims.len())
@@ -1251,7 +1250,7 @@ impl CppGraphConverter {
         Box::new(self.iota_op(iota_dimension, shape))
     }
 
-    /* 
+    /*
     pub fn new_constant_op(&mut self, shape: &[i32]) -> Box<TensorInfo> {
         Box::new(self.constant_op(shape))
     }
@@ -1298,12 +1297,9 @@ impl CppGraphConverter {
         Box::new(self.blackbox(&tensor_infos, cpp_num, shapes))
     }
 
-    pub fn new_return_op(
-        &mut self,
-        inpts: &[*mut TensorInfo],
-    ) -> Box<TensorInfo> {
+    pub fn new_return_op(&mut self, inpts: &[*mut TensorInfo]) -> Box<TensorInfo> {
         let tensor_infos: Vec<&TensorInfo> = inpts.iter().map(|&ptr| unsafe { &*ptr }).collect();
-        Box::new(self.return_op(&tensor_infos))        
+        Box::new(self.return_op(&tensor_infos))
     }
 
     pub fn print_rec_expr(&self) {
@@ -1425,9 +1421,9 @@ impl CppGraphConverter {
                     dim: "?d".parse().unwrap()
             }}),
             /* rewrite!("concat-dot";
-                     "(DotGeneralOp (ConcatenateOp (Vec ?a ?b) ?d1) (ConcatenateOp (Vec ?c ?d) ?d2) ?lb ?rb ?lc ?rc ?p)"
-                     => "(AddOp (DotGeneralOp ?a ?c ?lb ?rb ?lc ?rc ?p) (DotGeneralOp ?b ?d ?lb ?rb ?lc ?rc ?p))"
-                     if concat_dot_compatible("lc", "d1", "rc", "d2"))  // TODO: untested - awaiting shape inference */
+            "(DotGeneralOp (ConcatenateOp (Vec ?a ?b) ?d1) (ConcatenateOp (Vec ?c ?d) ?d2) ?lb ?rb ?lc ?rc ?p)"
+            => "(AddOp (DotGeneralOp ?a ?c ?lb ?rb ?lc ?rc ?p) (DotGeneralOp ?b ?d ?lb ?rb ?lc ?rc ?p))"
+            if concat_dot_compatible("lc", "d1", "rc", "d2"))  // TODO: untested - awaiting shape inference */
         ];
 
         rules.append(&mut custom_rules);
@@ -1468,12 +1464,12 @@ impl CppGraphConverter {
         println!("  Average nodes per class: {}", avg_nodes_per_class);
         println!("  Number of edges: {}", num_edges);
         println!("  Number of programs: {}", num_programs);
-            
+
         let (egraph, root) = (runner.egraph, runner.roots[0]);
         let cost_model: CostModel = CostModel::new();
         let (best, ext_secs) = extract_by_ilp(&egraph, root, &cost_model);
         // let (best, ext_secs) = extract_by_greedy(&egraph, root, &cost_model);
-        
+
         // println!("{}", best);
         self.convert_to_node(best)
     }
@@ -1484,10 +1480,7 @@ fn extract_by_greedy(
     root: Id,
     cost_model: &CostModel,
 ) -> (RecExpr<Mdl>, f32) {
-    let tnsr_cost = TensorCost {
-        egraph,
-        cost_model,
-    };
+    let tnsr_cost = TensorCost { egraph, cost_model };
     let start_time = Instant::now();
     let mut extractor = Extractor::new(egraph, tnsr_cost);
     let (best_cost, best) = extractor.find_best(root);
