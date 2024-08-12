@@ -41,7 +41,7 @@ define_language! {
       "GatherOp"           = GatherOp([Id; 10]),
       "SelectOp"           = SelectOp([Id; 3]), // pred, on_true, on_false
       "ConcatenateOp"      = ConcatenateOp([Id; 2]), // inputs, dimension
-      "DotGeneralOp"       = DotGeneralOp([Id; 8]), // lhs, rhs, ..., shape
+      "DotGeneralOp"       = DotGeneralOp([Id; 7]), // lhs, rhs, ..., shape
       "PadOp"              = PadOp([Id; 5]), // input, padding_value, edge_padding_low,
                                                        // edge_padding_high, interior_padding
       "SliceOp"            = SliceOp([Id; 4]), // input, start_indices, limit_indices, strides
@@ -418,7 +418,7 @@ impl Analysis<Mdl> for TensorAnalysis {
                 }
             }
             Mdl::DotGeneralOp(
-                [lhs, rhs, lhs_batch_dim, rhs_batch_dim, lhs_contract_dim, rhs_contract_dim, precision_config, shape],
+                [lhs, rhs, lhs_batch_dim, rhs_batch_dim, lhs_contract_dim, rhs_contract_dim, precision_config],
             ) => {
                 let lhs_dims = x(lhs);
                 let rhs_dims = x(rhs);
@@ -432,7 +432,6 @@ impl Analysis<Mdl> for TensorAnalysis {
                 let lhs_contract_dim_vec = get_vec_of_nums(egraph, &egraph[*lhs_contract_dim]);
                 let rhs_contract_dim_vec = get_vec_of_nums(egraph, &egraph[*rhs_contract_dim]);
                 let precision_config_vec = get_vec_of_nums(egraph, &egraph[*precision_config]);
-                let output_shape_vec = get_vec_of_nums(egraph, &egraph[*shape]);
                 let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
                     ffi::Ops::DotGeneralOp,
                     arg_dims,
@@ -443,7 +442,6 @@ impl Analysis<Mdl> for TensorAnalysis {
                         map_to_i64(lhs_contract_dim_vec),
                         map_to_i64(rhs_contract_dim_vec),
                         map_to_i64(precision_config_vec),
-                        map_to_i64(output_shape_vec),
                     ],
                     vec![],
                 );

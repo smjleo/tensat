@@ -633,7 +633,6 @@ impl CppGraphConverter {
         let lhs_contract_dim_name_id = self.vec_node(lhs_contracting_dimensions);
         let rhs_contract_dim_name_id = self.vec_node(rhs_contracting_dimensions);
         let precision_config_id = self.vec_node(precision_config);
-        let shape_id = self.vec_node(shape);
 
         let new_node = Mdl::DotGeneralOp([
             lhs.id,
@@ -643,7 +642,6 @@ impl CppGraphConverter {
             lhs_contract_dim_name_id,
             rhs_contract_dim_name_id,
             precision_config_id,
-            shape_id,
         ]);
 
         let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));

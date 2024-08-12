@@ -140,7 +140,7 @@ impl CostModel {
             ) => 0.0,
             Mdl::SelectOp([pred, on_true, on_false]) => 0.0,
             Mdl::DotGeneralOp(
-                [lhs, rhs, lhs_batch_dim, rhs_batch_dim, lhs_contract_dim, rhs_contract_dim, precision_config, shape],
+                [lhs, rhs, lhs_batch_dim, rhs_batch_dim, lhs_contract_dim, rhs_contract_dim, precision_config],
             ) => {
                 let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
                 let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
@@ -149,7 +149,6 @@ impl CostModel {
                 let lhs_contract_dim_vec = get_vec_of_nums(egraph, &egraph[*lhs_contract_dim]);
                 let rhs_contract_dim_vec = get_vec_of_nums(egraph, &egraph[*rhs_contract_dim]);
                 let precision_config_vec = get_vec_of_nums(egraph, &egraph[*precision_config]);
-                let shape_vec = get_vec_of_nums(egraph, &egraph[*shape]);
                 self.cpp_cost_model.get_cost(
                     ffi::Ops::DotGeneralOp,
                     vec![lhs_dims, rhs_dims],
@@ -160,7 +159,6 @@ impl CostModel {
                         map_to_i64(lhs_contract_dim_vec),
                         map_to_i64(rhs_contract_dim_vec),
                         map_to_i64(precision_config_vec),
-                        map_to_i64(shape_vec),
                     ],
                     vec![],
                 ) as f32
