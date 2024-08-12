@@ -1418,10 +1418,10 @@ impl CppGraphConverter {
                      strides: "?s".parse().unwrap(),
                     dim: "?d".parse().unwrap()
             }}),
-            /* rewrite!("concat-dot";
-            "(DotGeneralOp (ConcatenateOp (Vec ?a ?b) ?d1) (ConcatenateOp (Vec ?c ?d) ?d2) ?lb ?rb ?lc ?rc ?p)"
-            => "(AddOp (DotGeneralOp ?a ?c ?lb ?rb ?lc ?rc ?p) (DotGeneralOp ?b ?d ?lb ?rb ?lc ?rc ?p))"
-            if concat_dot_compatible("lc", "d1", "rc", "d2"))  // TODO: untested - awaiting shape inference */
+            rewrite!("concat-dot";
+                     "(DotGeneralOp (ConcatenateOp (Vec ?a ?b) ?d1) (ConcatenateOp (Vec ?c ?d) ?d2) ?lb ?rb ?lc ?rc ?p)"
+                     => "(AddOp (DotGeneralOp ?a ?c ?lb ?rb ?lc ?rc ?p) (DotGeneralOp ?b ?d ?lb ?rb ?lc ?rc ?p))"
+                     if concat_dot_compatible("?lc", "?d1", "?rc", "?d2"))  
         ];
 
         rules.append(&mut custom_rules);
