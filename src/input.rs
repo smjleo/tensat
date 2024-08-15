@@ -156,7 +156,7 @@ pub mod ffi {
         fn new_pad_op(
             self: &mut CppGraphConverter,
             inpt: &TensorInfo,
-            padding_value: i32,
+            padding_value: &TensorInfo,
             edge_padding_low: &[i32],
             edge_padding_high: &[i32],
             interior_padding: &[i32],
@@ -660,7 +660,7 @@ impl CppGraphConverter {
     fn pad_op(
         &mut self,
         inpt: &TensorInfo,
-        padding_value: i32,
+        padding_value: &TensorInfo,
         edge_padding_low: &[i32],
         edge_padding_high: &[i32],
         interior_padding: &[i32],
@@ -669,11 +669,10 @@ impl CppGraphConverter {
         let edge_padding_low_id = self.vec_node(edge_padding_low);
         let edge_padding_high_id = self.vec_node(edge_padding_high);
         let interior_padding_id = self.vec_node(interior_padding);
-        let padding_value_id = self.add_or_get_val(padding_value);
 
         let new_node = Mdl::PadOp([
             inpt.id,
-            padding_value_id,
+            padding_value.id,
             edge_padding_low_id,
             edge_padding_high_id,
             interior_padding_id,
@@ -1142,7 +1141,7 @@ impl CppGraphConverter {
     pub fn new_pad_op(
         self: &mut CppGraphConverter,
         inpt: &TensorInfo,
-        padding_value: i32,
+        padding_value: &TensorInfo,
         edge_padding_low: &[i32],
         edge_padding_high: &[i32],
         interior_padding: &[i32],
@@ -1358,6 +1357,7 @@ impl CppGraphConverter {
                 Mdl::TanhOp(ops) => new_node("TanhOp", ops),
                 Mdl::ExpOp(ops) => new_node("ExpOp", ops),
                 Mdl::IotaOp(ops) => new_node("IotaOp", ops),
+                Mdl::PadOp(ops) => new_node("PadOp", ops),
                 Mdl::ReturnOp(ops) => new_node("ReturnOp", ops),
                 Mdl::BlackBox(ops) => new_node("blackbox", ops),
                 _ => unimplemented!(),

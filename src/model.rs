@@ -549,6 +549,33 @@ impl Analysis<Mdl> for TensorAnalysis {
                     name: None,
                 }
             }
+            Mdl::PadOp([input, padding_value, edge_padding_low, edge_padding_high, interior_padding]) => {
+                let input_dims = x(input);
+                let padding_value_dims = x(padding_value);
+                let arg_dims = 
+                    vec![dim_to_i64_vec(&input_dims.shapes[0]), dim_to_i64_vec(&padding_value_dims.shapes[0])];
+                let arg_types = vec![ffi::Type::f32, ffi::Type::f32];
+                let edge_padding_low_vec = get_vec_of_nums(egraph, &egraph[*edge_padding_low]);
+                let edge_padding_high_vec = get_vec_of_nums(egraph, &egraph[*edge_padding_high]);
+                let interior_padding_vec = get_vec_of_nums(egraph, &egraph[*interior_padding]);
+                let shape_vec = egraph.analysis.cpp_shape_inference.get_shape(
+                    ffi::Ops::PadOp,
+                    arg_dims,
+                    arg_types,
+                    vec![
+                        map_to_i64(edge_padding_low_vec),
+                        map_to_i64(edge_padding_high_vec),
+                        map_to_i64(interior_padding_vec)
+                    ],
+                    vec![]
+                );
+                let (shapes, n_dims) = shape_from_dim(shape_vec);
+                TensorData {
+                    shapes,
+                    n_dims, 
+                    name: None,
+                }
+            }
             x => {
                 println!("{:?}", x);
                 unimplemented!("Op unimplemented")
