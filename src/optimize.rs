@@ -1,4 +1,4 @@
-use crate::{input::ffi, model::*, rewrites::*};
+use crate::{ffi_utils::*, input::ffi, model::*, rewrites::*};
 use egg::*;
 // use cxx::UniquePtr;
 use serde::{Deserialize, Serialize};
@@ -23,17 +23,11 @@ impl CostFunction<Mdl> for TensorCost<'_> {
 }
 
 /// Class for our cost model
-pub struct CostModel {
-    cpp_cost_model: cxx::UniquePtr<ffi::CostModel>, // Holding the C++ cost model
-                                                    // tensorinfo_map: &'a HashMap<Id, TensorInfo>,    // is this lifetime correct lol
-}
+pub struct CostModel {}
 
 impl CostModel {
     pub fn new(/* tensorinfo_map: &'a HashMap<Id, TensorInfo> */) -> Self {
-        Self {
-            cpp_cost_model: ffi::newCostModel(),
-            // tensorinfo_map,
-        }
+        Self {}
     }
 
     pub fn tensor_data_to_shape_vec(&self, tensor_data: &TensorData) -> ffi::Shape {
@@ -118,211 +112,7 @@ impl CostModel {
             | Mdl::BlackBox(_)
             | Mdl::Index(_)
             | Mdl::ReturnOp(_) => 0.0,
-            Mdl::CompareOp([input1, input2, comparison_direction, comparison_type]) => 0.0,
-            Mdl::BroadcastInDimOp([input, broadcast_dimension]) => 0.0,
-            Mdl::ConvertOp([input, output_type]) => 0.0,
-            Mdl::ReduceOp([input, init_values]) => 0.0,
-            Mdl::ReshapeOp([operand, shape]) => {
-                let operand_dims = x(operand);
-                let arg_dims = vec![dim_to_i64_vec(&operand_dims.shapes[0])];
-                let arg_types = vec![ffi::Type::f32];
-                let shape_vec = get_vec_of_nums(egraph, &egraph[*shape]);
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::ReshapeOp,
-                    arg_dims,
-                    arg_types,
-                    vec![map_to_i64(shape_vec)],
-                    vec![],
-                ) as f32
-            }
-            Mdl::GatherOp(
-                [input, start_indices, offset_dims, collapsed_slice_dims, operand_batching_dims, start_indices_batching_dims, start_index_map, index_vector_dim, slice_sizes, indices_are_sorted],
-            ) => 0.0,
-            Mdl::SelectOp([pred, on_true, on_false]) => 0.0,
-            Mdl::DotGeneralOp(
-                [lhs, rhs, lhs_batch_dim, rhs_batch_dim, lhs_contract_dim, rhs_contract_dim, precision_config],
-            ) => {
-                let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
-                let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
-                let lhs_batch_dim_vec = get_vec_of_nums(egraph, &egraph[*lhs_batch_dim]);
-                let rhs_batch_dim_vec = get_vec_of_nums(egraph, &egraph[*rhs_batch_dim]);
-                let lhs_contract_dim_vec = get_vec_of_nums(egraph, &egraph[*lhs_contract_dim]);
-                let rhs_contract_dim_vec = get_vec_of_nums(egraph, &egraph[*rhs_contract_dim]);
-                let precision_config_vec = get_vec_of_nums(egraph, &egraph[*precision_config]);
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::DotGeneralOp,
-                    vec![lhs_dims, rhs_dims],
-                    vec![ffi::Type::f32, ffi::Type::f32],
-                    vec![
-                        map_to_i64(lhs_batch_dim_vec),
-                        map_to_i64(rhs_batch_dim_vec),
-                        map_to_i64(lhs_contract_dim_vec),
-                        map_to_i64(rhs_contract_dim_vec),
-                        map_to_i64(precision_config_vec),
-                    ],
-                    vec![],
-                ) as f32
-            }
-            Mdl::ConcatenateOp([inputs, axis_input_id]) => {
-                let arg_dims = get_vec(&egraph[*inputs])
-                    .iter()
-                    .map(|id| {
-                        let dims = x(id);
-                        dim_to_i64_vec(&dims.shapes[0])
-                    })
-                    .collect::<Vec<ffi::Shape>>();
-                let arg_types: Vec<ffi::Type> = vec![ffi::Type::f32; inputs.len()];
-                let axis_num = *get_num(&egraph[*axis_input_id]) as i64;
-
-                // Call shape inference function
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::ConcatenateOp,
-                    arg_dims,
-                    arg_types,
-                    vec![],
-                    vec![axis_num],
-                ) as f32
-            }
-            Mdl::PadOp(
-                [input, padding_value, edge_padding_low, edge_padding_high, interior_padding],
-            ) => 100.0,
-            Mdl::SliceOp([input, start_indices, limit_indices, strides]) => {
-                let operand_dims = x(input);
-                let arg_dims = vec![dim_to_i64_vec(&operand_dims.shapes[0])];
-                let arg_types = vec![ffi::Type::f32];
-                let start_indices_vec = get_vec_of_nums(egraph, &egraph[*start_indices]);
-                let limit_indices_vec = get_vec_of_nums(egraph, &egraph[*limit_indices]);
-                let strides_vec = get_vec_of_nums(egraph, &egraph[*strides]);
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::SliceOp,
-                    arg_dims,
-                    arg_types,
-                    vec![
-                        map_to_i64(start_indices_vec),
-                        map_to_i64(limit_indices_vec),
-                        map_to_i64(strides_vec),
-                    ],
-                    vec![],
-                ) as f32
-            }
-            Mdl::TransposeOp([operand, permutation]) => {
-                let operand_dims = x(operand);
-                let arg_dims = vec![dim_to_i64_vec(&operand_dims.shapes[0])];
-                let arg_types = vec![ffi::Type::f32];
-                let permutation_vec = get_vec_of_nums(egraph, &egraph[*permutation]);
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::TransposeOp,
-                    arg_dims,
-                    arg_types,
-                    vec![map_to_i64(permutation_vec)],
-                    vec![],
-                ) as f32
-            }
-            Mdl::MulOp([lhs, rhs]) => {
-                let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
-                let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::MulOp,
-                    vec![lhs_dims, rhs_dims],
-                    vec![ffi::Type::f32, ffi::Type::f32],
-                    vec![],
-                    vec![],
-                ) as f32
-            }
-            Mdl::AddOp([lhs, rhs]) => {
-                let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
-                let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::AddOp,
-                    vec![lhs_dims, rhs_dims],
-                    vec![ffi::Type::f32, ffi::Type::f32],
-                    vec![],
-                    vec![],
-                ) as f32
-            }
-            Mdl::DivOp([lhs, rhs]) => {
-                let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
-                let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::DivOp,
-                    vec![lhs_dims, rhs_dims],
-                    vec![ffi::Type::f32, ffi::Type::f32],
-                    vec![],
-                    vec![],
-                ) as f32
-            }
-            Mdl::SubtractOp([lhs, rhs]) => {
-                let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
-                let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::SubtractOp,
-                    vec![lhs_dims, rhs_dims],
-                    vec![ffi::Type::f32, ffi::Type::f32],
-                    vec![],
-                    vec![],
-                ) as f32
-            }
-            Mdl::MinOp([lhs, rhs]) => {
-                let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
-                let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::MinOp,
-                    vec![lhs_dims, rhs_dims],
-                    vec![ffi::Type::f32, ffi::Type::f32],
-                    vec![],
-                    vec![],
-                ) as f32
-            }
-            Mdl::MaxOp([lhs, rhs]) => {
-                let lhs_dims = self.tensor_data_to_shape_vec(x(lhs));
-                let rhs_dims = self.tensor_data_to_shape_vec(x(rhs));
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::MaxOp,
-                    vec![lhs_dims, rhs_dims],
-                    vec![ffi::Type::f32, ffi::Type::f32],
-                    vec![],
-                    vec![],
-                ) as f32
-            }
-            Mdl::NegOp([operand]) => {
-                let operand_dims = self.tensor_data_to_shape_vec(x(operand));
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::NegOp,
-                    vec![operand_dims],
-                    vec![ffi::Type::f32],
-                    vec![],
-                    vec![],
-                ) as f32
-            }
-            Mdl::TanhOp([operand]) => {
-                let operand_dims = self.tensor_data_to_shape_vec(x(operand));
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::TanhOp,
-                    vec![operand_dims],
-                    vec![ffi::Type::f32],
-                    vec![],
-                    vec![],
-                ) as f32
-            }
-            Mdl::ExpOp([operand]) => {
-                let operand_dims = self.tensor_data_to_shape_vec(x(operand));
-                self.cpp_cost_model.get_cost(
-                    ffi::Ops::ExpOp,
-                    vec![operand_dims],
-                    vec![ffi::Type::f32],
-                    vec![],
-                    vec![],
-                ) as f32
-            }
-            Mdl::IotaOp([iota_dimension, shape]) => 20.0,
-            // Mdl::ConstantOp([]) => 1.0,
-            Mdl::DynamicUpdateSliceOp([operand, update, start_indices]) => 3.0,
-            Mdl::DynamicSliceOp([operand, start_indices, slice_sizes]) => 4.0,
-            Mdl::ScatterOp([input, scatter_indices, updates, dimension_numbers]) => 6.0,
-            x => {
-                println!("{:?}", x);
-                unimplemented!("Op unimplemented")
-            }
+            x => create_stablehlo_op(egraph, x, ffi::get_cost) as f32,
         }
     }
 }

@@ -158,6 +158,30 @@ pub fn get_vec_of_nums(
     result
 }
 
+pub fn get_vec_of_nums_option(
+    egraph: &EGraph<Mdl, TensorAnalysis>,
+    eclass: &EClass<Mdl, TensorData>,
+) -> Option<Vec<i32>> {
+    get_vec_option(eclass)
+        .map(|vec| {
+            vec.iter()
+                .map(|&id| get_num_option(&egraph[id]))
+                .collect::<Option<Vec<i32>>>()
+        })
+        .flatten()
+}
+
+pub fn get_vec_option(eclass: &EClass<Mdl, TensorData>) -> Option<&Vec<Id>> {
+    let mut iter = eclass.iter();
+    match iter.next() {
+        Some(Mdl::Vec(vec)) => match iter.next() {
+            Some(_) => panic!("Malformed vec node!"),
+            None => Some(vec),
+        },
+        _ => None,
+    }
+}
+
 pub fn get_vec(eclass: &EClass<Mdl, TensorData>) -> &Vec<Id> {
     for node in eclass.iter() {
         match node {
@@ -167,6 +191,17 @@ pub fn get_vec(eclass: &EClass<Mdl, TensorData>) -> &Vec<Id> {
     }
 
     panic!("no vec found");
+}
+
+pub fn get_num_option(eclass: &EClass<Mdl, TensorData>) -> Option<i32> {
+    for node in eclass.iter() {
+        match node {
+            Mdl::Num(n) => return Some(*n),
+            _ => {}
+        }
+    }
+
+    return None;
 }
 
 pub fn get_num(eclass: &EClass<Mdl, TensorData>) -> &i32 {
@@ -215,8 +250,12 @@ fn finish_apply(egraph: &mut EGraph<Mdl, TensorAnalysis>, matched_id: Id, new_id
     }
 }
 
-pub fn concat_dot_compatible(lc: &'static str, d1: &'static str, rc: &'static str, d2: &'static str) ->
-        impl Fn(&mut EGraph<Mdl, TensorAnalysis>, Id, &Subst) -> bool { 
+pub fn concat_dot_compatible(
+    lc: &'static str,
+    d1: &'static str,
+    rc: &'static str,
+    d2: &'static str,
+) -> impl Fn(&mut EGraph<Mdl, TensorAnalysis>, Id, &Subst) -> bool {
     // The dot_general of two concats should be able to be reduced into an add of two (smaller) dot_generals
     // if the dimension of each concat is included in the corresponding contract dims.
     // TODO: I'm not confident this always holds - seemed to work for smaller examples but there might

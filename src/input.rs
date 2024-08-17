@@ -271,34 +271,25 @@ pub mod ffi {
     }
 
     unsafe extern "C++" {
-        type CostModel;
-
         fn get_cost(
-            self: &CostModel,
             op: Ops,
             operand_dims: Vec<Shape>,
             operands_types: Vec<Type>,
             other_vector_args: Vec<Shape>, // These are not shapes..
             int_args: Vec<i64>,
         ) -> u64;
-
-        fn newCostModel() -> UniquePtr<CostModel>;
     }
 
     unsafe extern "C++" {
         include!("EqualitySaturation.h");
-        type ShapeInference;
 
         fn get_shape(
-            self: &ShapeInference,
             op: Ops,
             operand_dims: Vec<Shape>,
             operands_types: Vec<Type>,
             other_vector_args: Vec<Shape>, // These are not shapes..
             int_args: Vec<i64>,
         ) -> Vec<Shape>;
-
-        fn newShapeInference() -> UniquePtr<ShapeInference>;
     }
 }
 
@@ -1421,7 +1412,7 @@ impl CppGraphConverter {
             rewrite!("concat-dot";
                      "(DotGeneralOp (ConcatenateOp (Vec ?a ?b) ?d1) (ConcatenateOp (Vec ?c ?d) ?d2) ?lb ?rb ?lc ?rc ?p)"
                      => "(AddOp (DotGeneralOp ?a ?c ?lb ?rb ?lc ?rc ?p) (DotGeneralOp ?b ?d ?lb ?rb ?lc ?rc ?p))"
-                     if concat_dot_compatible("?lc", "?d1", "?rc", "?d2"))  
+                     if concat_dot_compatible("?lc", "?d1", "?rc", "?d2")),
         ];
 
         rules.append(&mut custom_rules);
