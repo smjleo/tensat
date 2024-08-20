@@ -303,7 +303,6 @@ pub struct CppGraphConverter {
     rec_expr: RecExpr<Mdl>,
     scalar_map: HashMap<i32, Id>,
     name_gen: NameGen,
-    tensorinfo_map: HashMap<Id, TensorInfo>,
     blackbox_cpp_num_to_tensorinfo: HashMap<i32, TensorInfo>,
 }
 
@@ -323,651 +322,6 @@ impl CppGraphConverter {
         let node = Mdl::Vec(vec);
         let id = self.rec_expr.add(node);
         id
-    }
-
-    fn input(&mut self, block_arg_number: i32, dims: &[i32]) -> TensorInfo {
-        let name = format!("input_{}", block_arg_number) + "@" + &dims.iter().join("_");
-        let node = Mdl::Var(Symbol::from(name));
-        let name_id = self.rec_expr.add(node);
-        let block_arg_node_id = self.add_or_get_val(block_arg_number);
-        let new_node = Mdl::Input([name_id, block_arg_node_id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(dims));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    fn index(&mut self, index: i32, inpt: &TensorInfo) -> TensorInfo {
-        let index_num_node = self.add_or_get_val(index);
-        let new_node = Mdl::Index([index_num_node, inpt.id]);
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes: vec![inpt.tensor_data.shapes[index as usize]],
-                n_dims: vec![inpt.tensor_data.n_dims[index as usize]],
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn blackbox(
-        &mut self,
-        inpts: &[&TensorInfo],
-        cpp_num: i32,
-        shapes: &Vec<ffi::Shape>,
-    ) -> TensorInfo {
-        let cpp_num_node = self.add_or_get_val(cpp_num);
-        let mut ids: Vec<Id> = inpts.iter().map(|inpt| inpt.id).collect();
-        ids.push(cpp_num_node);
-
-        // Convert the vector of Ids to a boxed slice and create the BlackBox node
-        let new_node = Mdl::BlackBox(ids.into_boxed_slice());
-
-        let (shapes, n_dims) = self.shape_from_dim(shapes);
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        self.blackbox_cpp_num_to_tensorinfo
-            .insert(cpp_num, res.clone());
-        res
-    }
-
-    pub fn return_op(&mut self, inpts: &[&TensorInfo]) -> TensorInfo {
-        let inputs_node = Mdl::Vec(inpts.iter().map(|i| i.id).collect());
-        let inputs_id = self.rec_expr.add(inputs_node);
-        let new_node = Mdl::ReturnOp([inputs_id]);
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes: vec![],
-                n_dims: vec![],
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn compare_op(
-        &mut self,
-        inpt_1: &TensorInfo,
-        inpt_2: &TensorInfo,
-        comparison_direction: i32,
-        comparison_type: i32,
-        shape: &[i32],
-    ) -> TensorInfo {
-        let comparison_direction_node = self.add_or_get_val(comparison_direction);
-        let comparison_type_node = self.add_or_get_val(comparison_type);
-        let new_node = Mdl::CompareOp([
-            inpt_1.id,
-            inpt_2.id,
-            comparison_direction_node,
-            comparison_type_node,
-        ]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn broadcast_in_dim(
-        &mut self,
-        inpt: &TensorInfo,
-        dimensions: &[i32],
-        shape: &[i32],
-    ) -> TensorInfo {
-        let dimensions_id = self.vec_node(dimensions);
-        let new_node = Mdl::BroadcastInDimOp([inpt.id, dimensions_id]);
-
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    // Weird calling convention: the result type is specified with a type annotation, and is NOT a parameter
-    pub fn convert_op(&mut self, inpt: &TensorInfo, output_type: i32, shape: &[i32]) -> TensorInfo {
-        let output_type_node = self.add_or_get_val(output_type);
-        let new_node = Mdl::ConvertOp([inpt.id, output_type_node]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    // needs to take in a variadic number of input tensors
-    pub fn reduce_op(
-        &mut self,
-        inpt: &TensorInfo,
-        dimensions: &[i32],
-        shapes: &Vec<ffi::Shape>,
-    ) -> TensorInfo {
-        let dimensions_id = self.vec_node(dimensions);
-        let new_node = Mdl::ReduceOp([inpt.id, dimensions_id]);
-        let (shapes, n_dims) = self.shape_from_dim(shapes);
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn reshape_op(&mut self, inpt: &TensorInfo, shape: &[i32]) -> TensorInfo {
-        let shape_id = self.vec_node(shape);
-        let new_node = Mdl::ReshapeOp([inpt.id, shape_id]);
-        let (shapes_new, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes: shapes_new,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    // https://github.com/openxla/stablehlo/blob/main/docs/spec.md#inputs-44
-    // Lots of inputs, we might want to investigate posisble rewrites and based on that decide how to implement this
-    pub fn gather_op(
-        &mut self,
-        inpt: &TensorInfo,
-        start_indices: &TensorInfo,
-        offset_dims: &[i32],
-        collapsed_slice_dims: &[i32],
-        operand_batching_dims: &[i32],
-        start_indices_batching_dims: &[i32],
-        start_index_map: &[i32],
-        index_vector_dim: i32,
-        slice_sizes: &[i32],
-        indices_are_sorted: i32,
-        shape: &[i32],
-    ) -> TensorInfo {
-        let offset_dims_id = self.vec_node(offset_dims);
-        let collapsed_slice_dims_id = self.vec_node(collapsed_slice_dims);
-        let operand_batching_dims_id = self.vec_node(operand_batching_dims);
-        let start_indices_batching_dims_id = self.vec_node(start_indices_batching_dims);
-        let start_index_map_id = self.vec_node(start_index_map);
-        let slice_sizes_id = self.vec_node(slice_sizes);
-        let index_vector_dim_id = self.add_or_get_val(index_vector_dim);
-        let indices_are_sorted_id = self.add_or_get_val(indices_are_sorted);
-
-        let new_node = Mdl::GatherOp([
-            inpt.id,
-            start_indices.id,
-            offset_dims_id,
-            collapsed_slice_dims_id,
-            operand_batching_dims_id,
-            start_indices_batching_dims_id,
-            start_index_map_id,
-            index_vector_dim_id,
-            slice_sizes_id,
-            indices_are_sorted_id,
-        ]);
-
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    fn concatenate_op(
-        &mut self,
-        inputs: &[&TensorInfo],
-        dimension: i32,
-        shape: &[i32],
-    ) -> TensorInfo {
-        let dimension_id = self.add_or_get_val(dimension);
-        let inputs_node = Mdl::Vec(inputs.iter().map(|i| i.id).collect());
-        let inputs_id = self.rec_expr.add(inputs_node);
-        let dimension_id = self.add_or_get_val(dimension);
-        let new_node = Mdl::ConcatenateOp([inputs_id, dimension_id]);
-
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    fn select_op(
-        &mut self,
-        pred: &TensorInfo,
-        on_true: &TensorInfo,
-        on_false: &TensorInfo,
-        shape: &[i32],
-    ) -> TensorInfo {
-        let new_node = Mdl::SelectOp([pred.id, on_true.id, on_false.id]);
-
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    fn dot_general_op(
-        &mut self,
-        lhs: &TensorInfo,
-        rhs: &TensorInfo,
-        lhs_batching_dimensions: &[i32],
-        rhs_batching_dimensions: &[i32],
-        lhs_contracting_dimensions: &[i32],
-        rhs_contracting_dimensions: &[i32],
-        precision_config: &[i32],
-        shape: &[i32],
-    ) -> TensorInfo {
-        // This produces ugly empty nodes when there's no batch dimension
-        let lhs_batch_dim_name_id = self.vec_node(lhs_batching_dimensions);
-        let rhs_batch_dim_name_id = self.vec_node(rhs_batching_dimensions);
-        let lhs_contract_dim_name_id = self.vec_node(lhs_contracting_dimensions);
-        let rhs_contract_dim_name_id = self.vec_node(rhs_contracting_dimensions);
-        let precision_config_id = self.vec_node(precision_config);
-
-        let new_node = Mdl::DotGeneralOp([
-            lhs.id,
-            rhs.id,
-            lhs_batch_dim_name_id,
-            rhs_batch_dim_name_id,
-            lhs_contract_dim_name_id,
-            rhs_contract_dim_name_id,
-            precision_config_id,
-        ]);
-
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    fn pad_op(
-        &mut self,
-        inpt: &TensorInfo,
-        padding_value: &TensorInfo,
-        edge_padding_low: &[i32],
-        edge_padding_high: &[i32],
-        interior_padding: &[i32],
-        shape: &[i32],
-    ) -> TensorInfo {
-        let edge_padding_low_id = self.vec_node(edge_padding_low);
-        let edge_padding_high_id = self.vec_node(edge_padding_high);
-        let interior_padding_id = self.vec_node(interior_padding);
-
-        let new_node = Mdl::PadOp([
-            inpt.id,
-            padding_value.id,
-            edge_padding_low_id,
-            edge_padding_high_id,
-            interior_padding_id,
-        ]);
-
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn slice_op(
-        &mut self,
-        inpt: &TensorInfo,
-        start_indices: &[i32],
-        limit_indices: &[i32],
-        strides: &[i32],
-        shape: &[i32],
-    ) -> TensorInfo {
-        let start_indices_id = self.vec_node(start_indices);
-        let limit_indices_id = self.vec_node(limit_indices);
-        let strides_id = self.vec_node(strides);
-        let new_node = Mdl::SliceOp([inpt.id, start_indices_id, limit_indices_id, strides_id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn transpose_op(
-        &mut self,
-        inpt: &TensorInfo,
-        permutation: &[i32],
-        shape: &[i32],
-    ) -> TensorInfo {
-        let permutation_id = self.vec_node(permutation);
-        let new_node = Mdl::TransposeOp([inpt.id, permutation_id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn mul_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, shape: &[i32]) -> TensorInfo {
-        let new_node = Mdl::MulOp([lhs.id, rhs.id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn add_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, shape: &[i32]) -> TensorInfo {
-        let new_node = Mdl::AddOp([lhs.id, rhs.id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn div_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, shape: &[i32]) -> TensorInfo {
-        let new_node = Mdl::DivOp([lhs.id, rhs.id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn subtract_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, shape: &[i32]) -> TensorInfo {
-        let new_node = Mdl::SubtractOp([lhs.id, rhs.id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn min_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, shape: &[i32]) -> TensorInfo {
-        let new_node = Mdl::MinOp([lhs.id, rhs.id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn max_op(&mut self, lhs: &TensorInfo, rhs: &TensorInfo, shape: &[i32]) -> TensorInfo {
-        let new_node = Mdl::MaxOp([lhs.id, rhs.id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn neg_op(&mut self, inpt: &TensorInfo, shape: &[i32]) -> TensorInfo {
-        let new_node = Mdl::NegOp([inpt.id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn tanh_op(&mut self, inpt: &TensorInfo, shape: &[i32]) -> TensorInfo {
-        let new_node = Mdl::TanhOp([inpt.id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn exp_op(&mut self, inpt: &TensorInfo, shape: &[i32]) -> TensorInfo {
-        let new_node = Mdl::ExpOp([inpt.id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn iota_op(&mut self, iota_dimension: i32, shape: &[i32]) -> TensorInfo {
-        let iota_dim_id = self.add_or_get_val(iota_dimension);
-        let shape_id = self.vec_node(shape);
-        let new_node = Mdl::IotaOp([iota_dim_id, shape_id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    /*
-    pub fn constant_op(&mut self, shape: &[i32]) -> TensorInfo {
-        let new_node = Mdl::ConstantOp([]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-    */
-
-    pub fn dynamic_update_slice_op(
-        &mut self,
-        operand: &TensorInfo,
-        update: &TensorInfo,
-        start_indices: &TensorInfo,
-        shape: &[i32],
-    ) -> TensorInfo {
-        let new_node = Mdl::DynamicUpdateSliceOp([operand.id, update.id, start_indices.id]);
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn dynamic_slice_op(
-        &mut self,
-        operand: &TensorInfo,
-        start_indices: &TensorInfo,
-        slice_sizes: i32,
-        shape: &[i32],
-    ) -> TensorInfo {
-        let slice_sizes_id = self.add_or_get_val(slice_sizes);
-        let new_node = Mdl::DynamicSliceOp([operand.id, start_indices.id, slice_sizes_id]);
-
-        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
-    }
-
-    pub fn scatter_op(
-        &mut self,
-        inpt: &TensorInfo,
-        scatter_indices: &TensorInfo,
-        updates: &TensorInfo,
-        dimension_numbers: i32,
-        shapes: &Vec<ffi::Shape>,
-    ) -> TensorInfo {
-        let dimension_numbers_id = self.add_or_get_val(dimension_numbers);
-        let new_node = Mdl::ScatterOp([
-            inpt.id,
-            scatter_indices.id,
-            updates.id,
-            dimension_numbers_id,
-        ]);
-        let (shapes, n_dims) = self.shape_from_dim(shapes);
-        let res = TensorInfo {
-            id: self.rec_expr.add(new_node),
-            tensor_data: TensorData {
-                shapes,
-                n_dims,
-                name: None,
-            },
-        };
-        self.tensorinfo_map.insert(res.id, res.clone());
-        res
     }
 
     fn add_or_get_val(&mut self, val: i32) -> Id {
@@ -1008,11 +362,35 @@ impl CppGraphConverter {
 
     // Wrapper functions for C++ side
     pub fn new_input(&mut self, block_arg_number: i32, shape: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.input(block_arg_number, shape))
+        let name = format!("input_{}", block_arg_number) + "@" + &shape.iter().join("_");
+        let node = Mdl::Var(Symbol::from(name));
+        let name_id = self.rec_expr.add(node);
+        let block_arg_node_id = self.add_or_get_val(block_arg_number);
+        let new_node = Mdl::Input([name_id, block_arg_node_id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_index(&mut self, index: i32, inpt: &TensorInfo) -> Box<TensorInfo> {
-        Box::new(self.index(index, inpt))
+        let index_num_node = self.add_or_get_val(index);
+        let new_node = Mdl::Index([index_num_node, inpt.id]);
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes: vec![inpt.tensor_data.shapes[index as usize]],
+                n_dims: vec![inpt.tensor_data.n_dims[index as usize]],
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_compare_op(
@@ -1023,7 +401,24 @@ impl CppGraphConverter {
         comparison_type: i32,
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.compare_op(inpt_1, inpt_2, comparison_direction, comparison_type, shape))
+        let comparison_direction_node = self.add_or_get_val(comparison_direction);
+        let comparison_type_node = self.add_or_get_val(comparison_type);
+        let new_node = Mdl::CompareOp([
+            inpt_1.id,
+            inpt_2.id,
+            comparison_direction_node,
+            comparison_type_node,
+        ]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_broadcast_in_dim(
@@ -1032,7 +427,19 @@ impl CppGraphConverter {
         dimensions: &[i32],
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.broadcast_in_dim(inpt, dimensions, shape))
+        let dimensions_id = self.vec_node(dimensions);
+        let new_node = Mdl::BroadcastInDimOp([inpt.id, dimensions_id]);
+
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_convert_op(
@@ -1041,7 +448,18 @@ impl CppGraphConverter {
         output_type: i32,
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.convert_op(inpt, output_type, shape))
+        let output_type_node = self.add_or_get_val(output_type);
+        let new_node = Mdl::ConvertOp([inpt.id, output_type_node]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_reduce_op(
@@ -1050,11 +468,33 @@ impl CppGraphConverter {
         dimensions: &[i32],
         shapes: &Vec<ffi::Shape>,
     ) -> Box<TensorInfo> {
-        Box::new(self.reduce_op(inpt, dimensions, shapes))
+        let dimensions_id = self.vec_node(dimensions);
+        let new_node = Mdl::ReduceOp([inpt.id, dimensions_id]);
+        let (shapes, n_dims) = self.shape_from_dim(shapes);
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_reshape_op(&mut self, inpt: &TensorInfo, shape: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.reshape_op(inpt, shape))
+        let shape_id = self.vec_node(shape);
+        let new_node = Mdl::ReshapeOp([inpt.id, shape_id]);
+        let (shapes_new, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes: shapes_new,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     fn new_gather_op(
@@ -1071,19 +511,38 @@ impl CppGraphConverter {
         indices_are_sorted: i32,
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.gather_op(
-            inpt,
-            start_indices,
-            offset_dims,
-            collapsed_slice_dims,
-            operand_batching_dims,
-            start_indices_batching_dims,
-            start_index_map,
-            index_vector_dim,
-            slice_sizes,
-            indices_are_sorted,
-            shape,
-        ))
+        let offset_dims_id = self.vec_node(offset_dims);
+        let collapsed_slice_dims_id = self.vec_node(collapsed_slice_dims);
+        let operand_batching_dims_id = self.vec_node(operand_batching_dims);
+        let start_indices_batching_dims_id = self.vec_node(start_indices_batching_dims);
+        let start_index_map_id = self.vec_node(start_index_map);
+        let slice_sizes_id = self.vec_node(slice_sizes);
+        let index_vector_dim_id = self.add_or_get_val(index_vector_dim);
+        let indices_are_sorted_id = self.add_or_get_val(indices_are_sorted);
+
+        let new_node = Mdl::GatherOp([
+            inpt.id,
+            start_indices.id,
+            offset_dims_id,
+            collapsed_slice_dims_id,
+            operand_batching_dims_id,
+            start_indices_batching_dims_id,
+            start_index_map_id,
+            index_vector_dim_id,
+            slice_sizes_id,
+            indices_are_sorted_id,
+        ]);
+
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_select_op(
@@ -1093,7 +552,18 @@ impl CppGraphConverter {
         on_false: &TensorInfo,
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.select_op(pred, on_true, on_false, shape))
+        let new_node = Mdl::SelectOp([pred.id, on_true.id, on_false.id]);
+
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_concatenate_op(
@@ -1103,7 +573,21 @@ impl CppGraphConverter {
         shape: &[i32],
     ) -> Box<TensorInfo> {
         let tensor_infos: Vec<&TensorInfo> = inputs.iter().map(|&ptr| unsafe { &*ptr }).collect();
-        Box::new(self.concatenate_op(&tensor_infos, dimension, shape))
+        let inputs_node = Mdl::Vec(tensor_infos.iter().map(|i| i.id).collect());
+        let inputs_id = self.rec_expr.add(inputs_node);
+        let dimension_id = self.add_or_get_val(dimension);
+        let new_node = Mdl::ConcatenateOp([inputs_id, dimension_id]);
+
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_dot_general_op(
@@ -1117,16 +601,33 @@ impl CppGraphConverter {
         precision_config: &[i32],
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.dot_general_op(
-            lhs,
-            rhs,
-            lhs_batching_dimensions,
-            rhs_batching_dimensions,
-            lhs_contracting_dimensions,
-            rhs_contracting_dimensions,
-            precision_config,
-            shape,
-        ))
+        // This produces ugly empty nodes when there's no batch dimension
+        let lhs_batch_dim_name_id = self.vec_node(lhs_batching_dimensions);
+        let rhs_batch_dim_name_id = self.vec_node(rhs_batching_dimensions);
+        let lhs_contract_dim_name_id = self.vec_node(lhs_contracting_dimensions);
+        let rhs_contract_dim_name_id = self.vec_node(rhs_contracting_dimensions);
+        let precision_config_id = self.vec_node(precision_config);
+
+        let new_node = Mdl::DotGeneralOp([
+            lhs.id,
+            rhs.id,
+            lhs_batch_dim_name_id,
+            rhs_batch_dim_name_id,
+            lhs_contract_dim_name_id,
+            rhs_contract_dim_name_id,
+            precision_config_id,
+        ]);
+
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_pad_op(
@@ -1138,14 +639,29 @@ impl CppGraphConverter {
         interior_padding: &[i32],
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.pad_op(
-            inpt,
-            padding_value,
-            edge_padding_low,
-            edge_padding_high,
-            interior_padding,
-            shape,
-        ))
+        let edge_padding_low_id = self.vec_node(edge_padding_low);
+        let edge_padding_high_id = self.vec_node(edge_padding_high);
+        let interior_padding_id = self.vec_node(interior_padding);
+
+        let new_node = Mdl::PadOp([
+            inpt.id,
+            padding_value.id,
+            edge_padding_low_id,
+            edge_padding_high_id,
+            interior_padding_id,
+        ]);
+
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_slice_op(
@@ -1156,7 +672,20 @@ impl CppGraphConverter {
         strides: &[i32],
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.slice_op(inpt, start_indices, limit_indices, strides, shape))
+        let start_indices_id = self.vec_node(start_indices);
+        let limit_indices_id = self.vec_node(limit_indices);
+        let strides_id = self.vec_node(strides);
+        let new_node = Mdl::SliceOp([inpt.id, start_indices_id, limit_indices_id, strides_id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_transpose_op(
@@ -1165,7 +694,18 @@ impl CppGraphConverter {
         permutation: &[i32],
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.transpose_op(inpt, permutation, shape))
+        let permutation_id = self.vec_node(permutation);
+        let new_node = Mdl::TransposeOp([inpt.id, permutation_id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_mul_op(
@@ -1174,7 +714,17 @@ impl CppGraphConverter {
         rhs: &TensorInfo,
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.mul_op(lhs, rhs, shape))
+        let new_node = Mdl::MulOp([lhs.id, rhs.id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_add_op(
@@ -1183,7 +733,17 @@ impl CppGraphConverter {
         rhs: &TensorInfo,
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.add_op(lhs, rhs, shape))
+        let new_node = Mdl::AddOp([lhs.id, rhs.id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_div_op(
@@ -1192,7 +752,17 @@ impl CppGraphConverter {
         rhs: &TensorInfo,
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.div_op(lhs, rhs, shape))
+        let new_node = Mdl::DivOp([lhs.id, rhs.id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_subtract_op(
@@ -1201,7 +771,17 @@ impl CppGraphConverter {
         rhs: &TensorInfo,
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.subtract_op(lhs, rhs, shape))
+        let new_node = Mdl::SubtractOp([lhs.id, rhs.id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_min_op(
@@ -1210,7 +790,17 @@ impl CppGraphConverter {
         rhs: &TensorInfo,
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.min_op(lhs, rhs, shape))
+        let new_node = Mdl::MinOp([lhs.id, rhs.id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_max_op(
@@ -1219,30 +809,76 @@ impl CppGraphConverter {
         rhs: &TensorInfo,
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.max_op(lhs, rhs, shape))
+        let new_node = Mdl::MaxOp([lhs.id, rhs.id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_neg_op(&mut self, inpt: &TensorInfo, shape: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.neg_op(inpt, shape))
+        let new_node = Mdl::NegOp([inpt.id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_tanh_op(&mut self, inpt: &TensorInfo, shape: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.tanh_op(inpt, shape))
+        let new_node = Mdl::TanhOp([inpt.id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_exp_op(&mut self, inpt: &TensorInfo, shape: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.exp_op(inpt, shape))
+        let new_node = Mdl::ExpOp([inpt.id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_iota_op(&mut self, iota_dimension: i32, shape: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.iota_op(iota_dimension, shape))
+        let iota_dim_id = self.add_or_get_val(iota_dimension);
+        let shape_id = self.vec_node(shape);
+        let new_node = Mdl::IotaOp([iota_dim_id, shape_id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
-
-    /*
-    pub fn new_constant_op(&mut self, shape: &[i32]) -> Box<TensorInfo> {
-        Box::new(self.constant_op(shape))
-    }
-    */
 
     pub fn new_dynamic_update_slice_op(
         &mut self,
@@ -1251,7 +887,17 @@ impl CppGraphConverter {
         start_indices: &TensorInfo,
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.dynamic_update_slice_op(operand, update, start_indices, shape))
+        let new_node = Mdl::DynamicUpdateSliceOp([operand.id, update.id, start_indices.id]);
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_dynamic_slice_op(
@@ -1261,7 +907,19 @@ impl CppGraphConverter {
         slice_sizes: i32,
         shape: &[i32],
     ) -> Box<TensorInfo> {
-        Box::new(self.dynamic_slice_op(operand, start_indices, slice_sizes, shape))
+        let slice_sizes_id = self.add_or_get_val(slice_sizes);
+        let new_node = Mdl::DynamicSliceOp([operand.id, start_indices.id, slice_sizes_id]);
+
+        let (shapes, n_dims) = self.shape_from_dim(&self.single_shape_vec(shape));
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_scatter_op(
@@ -1272,7 +930,23 @@ impl CppGraphConverter {
         dimension_numbers: i32,
         shapes: &Vec<ffi::Shape>,
     ) -> Box<TensorInfo> {
-        Box::new(self.scatter_op(inpt, scatter_indices, updates, dimension_numbers, shapes))
+        let dimension_numbers_id = self.add_or_get_val(dimension_numbers);
+        let new_node = Mdl::ScatterOp([
+            inpt.id,
+            scatter_indices.id,
+            updates.id,
+            dimension_numbers_id,
+        ]);
+        let (shapes, n_dims) = self.shape_from_dim(shapes);
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn new_blackbox_op(
@@ -1282,12 +956,41 @@ impl CppGraphConverter {
         shapes: &Vec<ffi::Shape>,
     ) -> Box<TensorInfo> {
         let tensor_infos: Vec<&TensorInfo> = inpts.iter().map(|&ptr| unsafe { &*ptr }).collect();
-        Box::new(self.blackbox(&tensor_infos, cpp_num, shapes))
+        let cpp_num_node = self.add_or_get_val(cpp_num);
+        let mut ids: Vec<Id> = tensor_infos.iter().map(|inpt| inpt.id).collect();
+        ids.push(cpp_num_node);
+
+        // Convert the vector of Ids to a boxed slice and create the BlackBox node
+        let new_node = Mdl::BlackBox(ids.into_boxed_slice());
+
+        let (shapes, n_dims) = self.shape_from_dim(shapes);
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes,
+                n_dims,
+                name: None,
+            },
+        };
+        self.blackbox_cpp_num_to_tensorinfo
+            .insert(cpp_num, res.clone());
+        Box::new(res)
     }
 
     pub fn new_return_op(&mut self, inpts: &[*mut TensorInfo]) -> Box<TensorInfo> {
         let tensor_infos: Vec<&TensorInfo> = inpts.iter().map(|&ptr| unsafe { &*ptr }).collect();
-        Box::new(self.return_op(&tensor_infos))
+        let inputs_node = Mdl::Vec(tensor_infos.iter().map(|i| i.id).collect());
+        let inputs_id = self.rec_expr.add(inputs_node);
+        let new_node = Mdl::ReturnOp([inputs_id]);
+        let res = TensorInfo {
+            id: self.rec_expr.add(new_node),
+            tensor_data: TensorData {
+                shapes: vec![],
+                n_dims: vec![],
+                name: None,
+            },
+        };
+        Box::new(res)
     }
 
     pub fn print_rec_expr(&self) {
@@ -1381,8 +1084,7 @@ impl CppGraphConverter {
         let pre_defined_rules = PRE_DEFINED_RULES.iter().map(|&x| x);
         let split_rules: Vec<&str> = learned_rules.split("\n").chain(pre_defined_rules).collect();
         let do_filter_after = no_cycle && filter_after;
-        let analysis =
-            TensorAnalysis::new(&self.tensorinfo_map, &self.blackbox_cpp_num_to_tensorinfo);
+        let analysis = TensorAnalysis::new(&self.blackbox_cpp_num_to_tensorinfo);
         let runner = Runner::<Mdl, TensorAnalysis, ()>::new(analysis)
             .with_node_limit(node_limit)
             .with_time_limit(time_limit_sec)
