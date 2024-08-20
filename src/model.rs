@@ -131,20 +131,14 @@ pub struct TensorAnalysis {
     pub blacklist_nodes: HashSet<Mdl>,
     /// Newly added nodes by order
     pub newly_added: Vec<Mdl>,
-    /// Tracking TensorInfo for C++-originating ops
-    pub tensorinfo_map: HashMap<Id, TensorInfo>,
     pub blackbox_cpp_num_to_shape: HashMap<i32, TensorInfo>,
 }
 
 impl<'a> TensorAnalysis {
-    pub fn new(
-        tensorinfo_map: &HashMap<Id, TensorInfo>,
-        blackbox_cpp_num_to_shape: &HashMap<i32, TensorInfo>,
-    ) -> Self {
+    pub fn new(blackbox_cpp_num_to_shape: &HashMap<i32, TensorInfo>) -> Self {
         TensorAnalysis {
             blacklist_nodes: HashSet::<Mdl>::new(),
             newly_added: Vec::<Mdl>::new(),
-            tensorinfo_map: tensorinfo_map.clone(),
             blackbox_cpp_num_to_shape: blackbox_cpp_num_to_shape.clone(),
         }
     }
