@@ -26,7 +26,7 @@ impl CostFunction<Mdl> for TensorCost<'_> {
 pub struct CostModel {}
 
 impl CostModel {
-    pub fn new(/* tensorinfo_map: &'a HashMap<Id, TensorInfo> */) -> Self {
+    pub fn new() -> Self {
         Self {}
     }
 
