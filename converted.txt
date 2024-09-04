@@ -11,7 +11,6 @@
 (MaxOp ?x ?x)=>?x
 (SubtractOp ?x ?y)=>(AddOp ?x (NegOp ?y))
 (AddOp ?x (NegOp ?y))=>(SubtractOp ?x ?y)
-(NegOp (NegOp ?x))=>?x
 (NegOp (AddOp ?x ?y))=>(AddOp (NegOp ?x) (NegOp ?y))
 (AddOp (NegOp ?x) (NegOp ?y))=>(NegOp (AddOp ?x ?y))
 (NegOp (MulOp ?x ?y))=>(MulOp (NegOp ?x) ?y)

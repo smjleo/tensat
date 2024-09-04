@@ -1069,7 +1069,7 @@ impl CppGraphConverter {
         // Configuration
         let n_sec = 30; // seconds for timeout
         let use_multi = false; // whether to use multi patterns
-        let no_cycle = false; // is our graph by definition acyclic?
+        let no_cycle = true; // is our graph by definition acyclic?
         let filter_after = false; // vanilla filtering or efficient filtering
         let iter_limit = 10000;
         let node_limit = 5000000; // max nodes in e-graph
@@ -1222,7 +1222,7 @@ fn extract_by_ilp(
         arg_vec.push("--no_order");
     }
     let time_lim = "1000";
-    let num_thread = "1";
+    let num_thread = "8";
     arg_vec.push("--time_lim_sec");
     arg_vec.push(time_lim);
     arg_vec.push("--num_thread");
