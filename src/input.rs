@@ -362,6 +362,8 @@ impl CppGraphConverter {
 
     // Wrapper functions for C++ side
     pub fn new_input(&mut self, block_arg_number: i32, shape: &[i32]) -> Box<TensorInfo> {
+        // Check if the shape array is empty and replace it with a shape of 0 if needed
+        let shape = if shape.is_empty() { &[0] } else { shape };
         let name = format!("input_{}", block_arg_number) + "@" + &shape.iter().join("_");
         let node = Mdl::Var(Symbol::from(name));
         let name_id = self.rec_expr.add(node);
