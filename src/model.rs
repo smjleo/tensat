@@ -167,6 +167,7 @@ impl Analysis<Mdl> for TensorAnalysis {
                     .nth(1)
                     .expect("Invalid Var name: check shape")
                     .split('_')
+                    .filter(|&x| !x.is_empty()) // if we have a 0-rank shape, this turns out to be [""]
                     .map(|x| x.parse().unwrap())
                     .collect();
 

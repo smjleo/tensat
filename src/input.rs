@@ -355,16 +355,6 @@ impl CppGraphConverter {
 
     // Wrapper functions for C++ side
     pub fn new_input(&mut self, block_arg_number: i64, tensor: ffi::Tensor) -> Box<TensorInfo> {
-        // Check if the shape array is empty and replace it with a shape of 0 if needed
-
-        let tensor = if tensor.shape.is_empty() {
-            ffi::Tensor {
-                shape: vec![0],
-                element_type: tensor.element_type,
-            }
-        } else {
-            tensor
-        };
         let name = format!("input_{}", block_arg_number)
             + "@"
             + &tensor.shape.iter().join("_")
