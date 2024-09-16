@@ -5,47 +5,29 @@ use crate::{
 };
 use egg::*;
 
-fn dim_to_i64_vec(input: &[i32; MAX_DIM]) -> ffi::Shape {
-    ffi::Shape {
-        shape: input
-            .iter()
-            .filter(|&x| *x != 0)
-            .map(|x| *x as i64)
-            .collect::<Vec<i64>>(),
-    }
-}
-
-fn map_to_i64(vec: Vec<i32>) -> Vec<i64> {
-    vec.into_iter().map(|x| x as i64).collect()
-}
-
 fn process_enode_args(
     egraph: &EGraph<Mdl, TensorAnalysis>,
     enode: &Mdl,
-) -> (Vec<ffi::Shape>, Vec<ffi::Type>, Vec<ffi::Shape>, Vec<i64>) {
-    let mut args: Vec<ffi::Shape> = vec![];
-    let mut other_vecs: Vec<ffi::Shape> = vec![];
+) -> (Vec<ffi::Tensor>, Vec<ffi::Vector>, Vec<i64>) {
+    let mut args: Vec<ffi::Tensor> = vec![];
+    let mut other_vecs: Vec<ffi::Vector> = vec![];
     let mut int_args: Vec<i64> = vec![];
 
     for child in enode.children().iter() {
         if let Some(other_vec) = get_vec_of_nums_option(egraph, &egraph[*child]) {
-            other_vecs.push(ffi::Shape {
-                shape: map_to_i64(other_vec),
-            })
+            other_vecs.push(other_vec)
         } else if let Some(vec) = get_vec_option(&egraph[*child]) {
             vec.iter()
-                .for_each(|&id| args.push(dim_to_i64_vec(&egraph[id].data.shapes[0])))
+                .for_each(|&id| args.push(egraph[id].data.tensors[0].clone()))
         } else if let Some(num) = get_num_option(&egraph[*child]) {
             int_args.push(num as i64)
         } else {
-            args.push(dim_to_i64_vec(&egraph[*child].data.shapes[0]))
+            // TODO: throw in some assertions
+            args.push(egraph[*child].data.tensors[0].clone())
         }
     }
 
-    // TODO: need to handle types
-    let arg_types: Vec<ffi::Type> = args.iter().map(|_| ffi::Type::f32).collect();
-
-    (args, arg_types, other_vecs, int_args)
+    (args, other_vecs, int_args)
 }
 
 pub fn convert_mdl_to_ffi_op(enode: &Mdl) -> ffi::Ops {
@@ -86,10 +68,10 @@ pub fn create_stablehlo_op<F, R>(
     process_output: F,
 ) -> R
 where
-    F: Fn(ffi::Ops, Vec<ffi::Shape>, Vec<ffi::Type>, Vec<ffi::Shape>, Vec<i64>) -> R,
+    F: Fn(ffi::Ops, Vec<ffi::Tensor>, Vec<ffi::Vector>, Vec<i64>) -> R,
 {
     let op = convert_mdl_to_ffi_op(enode);
-    let (args, arg_types, other_vecs, int_args) = process_enode_args(egraph, enode);
-    let res = process_output(op, args, arg_types, other_vecs, int_args);
+    let (args, other_vecs, int_args) = process_enode_args(egraph, enode);
+    let res = process_output(op, args, other_vecs, int_args);
     res
 }

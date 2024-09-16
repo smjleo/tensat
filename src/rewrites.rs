@@ -1,4 +1,4 @@
-use crate::model::*;
+use crate::{input::ffi, model::*};
 use egg::{rewrite as rw, *};
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
@@ -145,7 +145,7 @@ pub static PRE_DEFINED_MULTI: &[&str] = &[
 pub fn get_vec_of_nums(
     egraph: &EGraph<Mdl, TensorAnalysis>,
     eclass: &EClass<Mdl, TensorData>,
-) -> Vec<i32> {
+) -> Vec<i64> {
     let vec = get_vec(eclass);
     let mut result = Vec::new();
 
@@ -161,14 +161,14 @@ pub fn get_vec_of_nums(
 pub fn get_vec_of_nums_option(
     egraph: &EGraph<Mdl, TensorAnalysis>,
     eclass: &EClass<Mdl, TensorData>,
-) -> Option<Vec<i32>> {
+) -> Option<ffi::Vector> {
     get_vec_option(eclass)
         .map(|vec| {
             vec.iter()
                 .map(|&id| get_num_option(&egraph[id]))
-                .collect::<Option<Vec<i32>>>()
+                .collect::<Option<Vec<i64>>>()
         })
-        .flatten()
+        .and_then(|opt_vec| opt_vec.map(|vec| ffi::Vector { vec }))
 }
 
 pub fn get_vec_option(eclass: &EClass<Mdl, TensorData>) -> Option<&Vec<Id>> {
@@ -193,7 +193,7 @@ pub fn get_vec(eclass: &EClass<Mdl, TensorData>) -> &Vec<Id> {
     panic!("no vec found");
 }
 
-pub fn get_num_option(eclass: &EClass<Mdl, TensorData>) -> Option<i32> {
+pub fn get_num_option(eclass: &EClass<Mdl, TensorData>) -> Option<i64> {
     for node in eclass.iter() {
         match node {
             Mdl::Num(n) => return Some(*n),
@@ -204,7 +204,7 @@ pub fn get_num_option(eclass: &EClass<Mdl, TensorData>) -> Option<i32> {
     return None;
 }
 
-pub fn get_num(eclass: &EClass<Mdl, TensorData>) -> &i32 {
+pub fn get_num(eclass: &EClass<Mdl, TensorData>) -> &i64 {
     for node in eclass.iter() {
         match node {
             Mdl::Num(n) => return n,
@@ -215,7 +215,7 @@ pub fn get_num(eclass: &EClass<Mdl, TensorData>) -> &i32 {
     panic!("no num found");
 }
 
-fn make_num(egraph: &mut EGraph<Mdl, TensorAnalysis>, num: i32) -> Id {
+fn make_num(egraph: &mut EGraph<Mdl, TensorAnalysis>, num: i64) -> Id {
     egraph.add(Mdl::Num(num))
 }
 
@@ -364,8 +364,8 @@ impl Applier<Mdl, TensorAnalysis> for MergeSlices {
         // limiting indices should be the same. The concat dim, we need to do
         // a bit of maths to ensure they are "contiguous" wrt the stride.
 
-        let mut new_starting: Vec<i32> = vec![];
-        let mut new_limiting: Vec<i32> = vec![];
+        let mut new_starting: Vec<i64> = vec![];
+        let mut new_limiting: Vec<i64> = vec![];
 
         for i in 0..n {
             let s1 = *get_num(&egraph[starting_1[i]]);
@@ -391,7 +391,7 @@ impl Applier<Mdl, TensorAnalysis> for MergeSlices {
                 // x     x    [x]
                 // So s2 = 7 for the two slices to be contiguous.
 
-                let numbers_picked = (l1 - s1) / stride + i32::from((l1 - s1) % stride != 0); // ceil
+                let numbers_picked = (l1 - s1) / stride + i64::from((l1 - s1) % stride != 0); // ceil
                 let next_unchosen_index = s1 + numbers_picked * stride;
                 if next_unchosen_index != s2 {
                     return vec![];

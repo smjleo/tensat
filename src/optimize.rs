@@ -30,16 +30,6 @@ impl CostModel {
         Self {}
     }
 
-    pub fn tensor_data_to_shape_vec(&self, tensor_data: &TensorData) -> ffi::Shape {
-        ffi::Shape {
-            shape: tensor_data.shapes[0]
-                .iter()
-                .filter(|&x| *x != 0)
-                .map(|&x| x as i64)
-                .collect(),
-        }
-    }
-
     /// Gets cost for the enode itself.
     ///
     /// This function gets the cost by calling TASO's get_or_create_{some_op}()
@@ -56,53 +46,6 @@ impl CostModel {
     ///
     /// Cost for this enode.
     pub fn get_self_cost(&self, egraph: &EGraph<Mdl, TensorAnalysis>, enode: &Mdl) -> f32 {
-        let x = |i: &Id| &egraph[*i].data;
-
-        fn dim_to_i64_vec(input: &[i32; MAX_DIM]) -> ffi::Shape {
-            ffi::Shape {
-                shape: input
-                    .iter()
-                    .filter(|&x| *x != 0)
-                    .map(|x| *x as i64)
-                    .collect::<Vec<i64>>(),
-            }
-        }
-
-        fn shape_from_dim(dims: Vec<i32>) -> ([i32; MAX_DIM], usize) {
-            if (dims.len() > MAX_DIM) {
-                panic!("Op shape exceeds MAX_DIM!");
-            }
-            let mut shape = [0; MAX_DIM];
-            for (i, dim) in dims.iter().enumerate() {
-                shape[i] = *dim;
-            }
-            (shape, dims.len())
-        }
-
-        fn print_joined_with_underscore(numbers: &Vec<i32>) {
-            let joined_numbers = numbers
-                .iter()
-                .map(|&num| num.to_string())
-                .collect::<Vec<_>>()
-                .join("_");
-            println!("{}", joined_numbers);
-        }
-
-        fn map_to_i64(vec: Vec<i32>) -> ffi::Shape {
-            ffi::Shape {
-                shape: vec.into_iter().map(|x| x as i64).collect(),
-            }
-        }
-
-        let dim_from_name_string = |name: &str| {
-            let name_vec: Vec<&str> = name.split("@").collect();
-            assert!(name_vec.len() == 2);
-            let dims: Vec<i32> = name_vec[1]
-                .split("_")
-                .map(|x| x.parse::<i32>().unwrap())
-                .collect();
-            shape_from_dim(dims)
-        };
         match enode {
             // NO REWRITES APPLY TO THESE SO THEY CAN HAVE ARBITRARY COST
             Mdl::Num(_)

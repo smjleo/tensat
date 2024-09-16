@@ -7,25 +7,9 @@ use rand;
 use std::convert::TryInto;
 use std::time::{Duration, Instant};
 use std::{collections::HashMap, collections::HashSet};
-use {
-    crate::ffi_utils::*,
-    crate::input::ffi::{self, Shape},
-    crate::rewrites::*,
-};
+use {crate::ffi_utils::*, crate::input::ffi, crate::rewrites::*};
 
 use egg::*;
-
-// Operator parameters, value matches the TASO side
-pub const PSAME: i32 = 0;
-pub const PVALID: i32 = 1;
-
-pub const ACTNONE: i32 = 0;
-pub const ACTSIGMOID: i32 = 1;
-pub const ACTRELU: i32 = 2;
-pub const ACTTANH: i32 = 3;
-
-pub const NOSHUFFLE: i32 = 0;
-pub const SHUFFLE: i32 = 1;
 
 define_language! {
   pub enum Mdl {
@@ -70,7 +54,7 @@ define_language! {
        "Vec"                = Vec(Vec<Id>),
        "Index"              = Index([Id; 2]),
        Var(Symbol),
-       Num(i32),
+       Num(i64),
   }
 }
 
@@ -88,8 +72,6 @@ impl Default for DataKind {
     }
 }
 
-pub const MAX_DIM: usize = 8;
-
 // Struct for storing shape and value-related metadata for tensors. This
 // is the base metadata struct that is used by Analysis as well.
 #[derive(Clone, Debug)]
@@ -105,10 +87,8 @@ pub struct TensorData {
     // operation that appears as an operand. This allows us to omit
     // (Index 0) for the common case of using the only element in
     // the operation.
-    /// Shapes of the tensor. We deal with tensor up to MAX_DIM dimensions.
-    pub shapes: Vec<[i32; MAX_DIM]>,
-    /// Number of dimensions of each result of this tensor
-    pub n_dims: Vec<usize>,
+    /// The list of results of this tensor
+    pub tensors: Vec<ffi::Tensor>,
     /// The name string of this eclass if it is a Name type
     pub name: Option<&'static str>,
 }
@@ -131,11 +111,11 @@ pub struct TensorAnalysis {
     pub blacklist_nodes: HashSet<Mdl>,
     /// Newly added nodes by order
     pub newly_added: Vec<Mdl>,
-    pub blackbox_cpp_num_to_shape: HashMap<i32, TensorInfo>,
+    pub blackbox_cpp_num_to_shape: HashMap<i64, TensorInfo>,
 }
 
 impl<'a> TensorAnalysis {
-    pub fn new(blackbox_cpp_num_to_shape: &HashMap<i32, TensorInfo>) -> Self {
+    pub fn new(blackbox_cpp_num_to_shape: &HashMap<i64, TensorInfo>) -> Self {
         TensorAnalysis {
             blacklist_nodes: HashSet::<Mdl>::new(),
             newly_added: Vec::<Mdl>::new(),
@@ -147,106 +127,71 @@ impl<'a> TensorAnalysis {
 impl Analysis<Mdl> for TensorAnalysis {
     type Data = TensorData;
 
-    /// Merges two metadata when two eclasses are merged.
     fn merge(&self, to: &mut Self::Data, from: Self::Data) -> bool {
-        assert!(to.shapes == from.shapes, "{:?}{:?}", to, from);
+        assert!(to.tensors == from.tensors, "{:?}{:?}", to, from);
         false
     }
 
     fn make(egraph: &EGraph<Mdl, Self>, enode: &Mdl) -> Self::Data {
         let x = |i: &Id| &egraph[*i].data;
 
-        fn dim_to_i64_vec(input: &[i32; MAX_DIM]) -> ffi::Shape {
-            ffi::Shape {
-                shape: input
-                    .iter()
-                    .filter(|&x| *x != 0)
-                    .map(|x| *x as i64)
-                    .collect::<Vec<i64>>(),
-            }
-        }
-
-        fn shape_from_dim(dims: Vec<Shape>) -> (Vec<[i32; MAX_DIM]>, Vec<usize>) {
-            let mut shapes: Vec<[i32; 8]> = vec![];
-            let mut n_dims: Vec<usize> = vec![];
-            for dims in dims.iter() {
-                let dims = &dims.shape;
-                if (dims.len() > MAX_DIM) {
-                    println!("ERROR: op shape exceeds MAX_DIM! e-graph no longer valid.");
-                }
-                let mut shape = [0; MAX_DIM];
-                for (i, dim) in dims.iter().enumerate() {
-                    shape[i] = *dim as i32;
-                }
-                shapes.push(shape);
-                n_dims.push(dims.len())
-            }
-            (shapes, n_dims)
-        }
-
-        fn dim_from_name_string(name: &str) -> (Vec<[i32; MAX_DIM]>, Vec<usize>) {
-            let name_vec: Vec<&str> = name.split("@").collect();
-            assert!(
-                name_vec.len() == 2,
-                "name: {}, len: {}",
-                name,
-                name_vec.len()
-            );
-            let dims: Vec<i64> = name_vec[1]
-                .split("_")
-                .map(|x| x.parse::<i64>().unwrap())
-                .collect();
-            shape_from_dim(vec![Shape { shape: dims }])
-        };
-
-        fn print_joined_with_underscore(numbers: &Vec<i32>) {
-            let joined_numbers = numbers
-                .iter()
-                .map(|&num| num.to_string())
-                .collect::<Vec<_>>()
-                .join("_");
-            println!("{}", joined_numbers);
-        }
-
-        fn map_to_i64(vec: Vec<i32>) -> ffi::Shape {
-            ffi::Shape {
+        // Helper function to create ffi::Tensor from Vec<i32>.
+        fn map_to_tensor(vec: Vec<i32>) -> ffi::Tensor {
+            ffi::Tensor {
                 shape: vec.into_iter().map(|x| x as i64).collect(),
+                element_type: ffi::Type::i32, // Example: assuming i32 element type, modify as needed
             }
         }
 
         let get_num = |id| {
             for node in egraph[id].iter() {
-                match node {
-                    Mdl::Num(x) => return x,
-                    _ => {}
+                if let Mdl::Num(x) = node {
+                    return x;
                 }
             }
-
             panic!("no num found");
         };
 
         match enode {
             Mdl::Num(_) | Mdl::Vec(_) => TensorData {
-                shapes: vec![[0; MAX_DIM]],
-                n_dims: vec![0],
-                name: Some(&"Num"),
+                tensors: vec![ffi::Tensor {
+                    shape: vec![0],
+                    element_type: ffi::Type::i32,
+                }],
+                name: Some("num"),
             },
             Mdl::Var(name) => {
-                let (shapes, n_dims) = dim_from_name_string(name.as_str());
-                let name = Some(name.as_str());
+                let shape: Vec<i64> = name
+                    .as_str()
+                    .split("@")
+                    .nth(1)
+                    .expect("Invalid Var name: check shape")
+                    .split('_')
+                    .map(|x| x.parse().unwrap())
+                    .collect();
+
+                let element_type: ffi::Type = ffi::Type::from_str(
+                    name.as_str()
+                        .split("@")
+                        .nth(2)
+                        .expect("Invalid Var name: check type"),
+                )
+                .expect("Invalid Var name: check type");
+
                 TensorData {
-                    shapes,
-                    n_dims,
-                    name,
+                    tensors: vec![ffi::Tensor {
+                        shape,
+                        element_type,
+                    }],
+                    name: Some(name.as_str()),
                 }
             }
-            Mdl::Input([node, block_arg_number]) => x(node).clone(),
+            Mdl::Input([node, _block_arg_number]) => x(node).clone(),
             Mdl::Index([index, input]) => {
-                let index = *get_num(*index);
+                let index = *get_num(*index) as usize;
                 let input = x(input);
                 TensorData {
-                    shapes: vec![input.shapes[index as usize]],
-                    n_dims: vec![input.n_dims[index as usize]],
+                    tensors: vec![input.tensors[index].clone()],
                     name: None,
                 }
             }
@@ -254,40 +199,29 @@ impl Analysis<Mdl> for TensorAnalysis {
                 let cpp_num = get_num(
                     *inputs
                         .last()
-                        .expect("Tried to call make() on a BlackBox without TensorData"),
+                        .expect("Tried to call make() on a BlackBox without tensors"),
                 );
                 let shape_vec = egraph.analysis.blackbox_cpp_num_to_shape[cpp_num]
                     .tensor_data
-                    .shapes
+                    .tensors
                     .iter()
-                    .map(|x| Shape {
-                        shape: x.iter().map(|x| *x as i64).collect(),
-                    })
-                    .collect::<Vec<Shape>>();
-                let (shapes, n_dims) = shape_from_dim(shape_vec);
+                    .map(|t| t.clone())
+                    .collect();
                 TensorData {
-                    shapes,
-                    n_dims,
+                    tensors: shape_vec,
                     name: None,
                 }
             }
             Mdl::ReturnOp(_) => TensorData {
-                shapes: vec![],
-                n_dims: vec![],
+                tensors: vec![],
                 name: None,
             },
-            x => {
-                let shape = create_stablehlo_op(egraph, x, ffi::get_shape);
-                let (shapes, n_dims) = shape_from_dim(shape);
-                TensorData {
-                    shapes,
-                    n_dims,
-                    name: None,
-                }
-            }
+            x => TensorData {
+                tensors: create_stablehlo_op(egraph, x, ffi::get_shape),
+                name: None,
+            },
         }
     }
 
-    // Not needed to modify anything
-    fn modify(egraph: &mut EGraph<Mdl, Self>, id: Id) {}
+    fn modify(_egraph: &mut EGraph<Mdl, Self>, _id: Id) {}
 }
