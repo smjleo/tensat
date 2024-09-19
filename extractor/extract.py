@@ -125,6 +125,9 @@ def main():
             # a class is fusable only if no un-fusable nodes are chosen
             solver.Add(class_has_fusable_node[g[i]] <= 1 - x[i])
     
+    # note that both [node_count_fusable_children] and [/_if_picked] 
+    #  are actually upper bounds for the relevant counts, 
+    #  but they end up maximised through the [fus_expr] objective
     node_count_fusable_children = {}
     for i in range(num_nodes):
         node_count_fusable_children[i] = solver.IntVar(0, len(h[i]), 'node_count_fusable_children[%i]' % j)
@@ -134,6 +137,7 @@ def main():
         # count children that can fuse
         solver.Add(node_count_fusable_children[i] <= sum(class_has_fusable_node[m] for m in h[i]))
 
+    # [node_count_fusable_children] if [x = 1], else 0
     node_count_fusable_children_if_picked = {}
     for i in range(num_nodes):
         node_count_fusable_children_if_picked[i] = solver.IntVar(0, len(h[i]), 'node_count_fusable_children_if_picked[%i]' % j)
@@ -213,7 +217,7 @@ def main():
 
     # Store results
     solved_x = [int(x[j].solution_value()) for j in range(num_nodes)]
-    solved_x_f = [int(fuse_ratio[j].solution_value()) for j in range(num_nodes)]
+    solved_x_f = [int(node_count_fusable_children_if_picked[j].solution_value()) for j in range(num_nodes)]
     result_dict = {}
     result_dict["solved_x"] = solved_x
     result_dict["solved_x_f"] = solved_x_f
