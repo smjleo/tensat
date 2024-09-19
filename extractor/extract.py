@@ -3,6 +3,8 @@ from ortools.linear_solver import pywraplp
 import json
 import argparse
 
+MAX_FUSABLE_BONUS = 0.9
+
 
 def get_args():
     parser = argparse.ArgumentParser(description='Construct and solve ILP')
@@ -114,33 +116,42 @@ def main():
         solver.Add(x[j] == 0)
 
     # fusion shenanigans
-    can_fuse_node_of_class = {}
+    class_has_fusable_node = {}
     for j in range(num_classes):
-        can_fuse_node_of_class[j] = solver.IntVar(0, 1, 'can_fuse_node_of_class[%i]' % j)
+        class_has_fusable_node[j] = solver.IntVar(0, 1, 'class_has_fusable_node[%i]' % j)
 
     for i in range(num_nodes):
         if not fus[i]:
             # a class is fusable only if no un-fusable nodes are chosen
-            solver.Add(can_fuse_node_of_class[g[i]] <= 1 - x[i])
+            solver.Add(class_has_fusable_node[g[i]] <= 1 - x[i])
     
-    can_fuse_node_with_children = {}
+    node_count_fusable_children = {}
     for i in range(num_nodes):
-        can_fuse_node_with_children[i] = solver.IntVar(0, len(h[i]), 'can_fuse_node_with_children[%i]' % j)
+        node_count_fusable_children[i] = solver.IntVar(0, len(h[i]), 'node_count_fusable_children[%i]' % j)
         if not fus[i]:
             # if the node itself cannot fuse, it can never fuse
-            solver.Add(can_fuse_node_with_children[i] <= 0)
+            solver.Add(node_count_fusable_children[i] <= 0)
         # count children that can fuse
-        solver.Add(can_fuse_node_with_children[i] <= sum(can_fuse_node_of_class[m] for m in h[i]))
+        solver.Add(node_count_fusable_children[i] <= sum(class_has_fusable_node[m] for m in h[i]))
 
-    fuse_ratio = {}
+    node_count_fusable_children_if_picked = {}
     for i in range(num_nodes):
-        fuse_ratio[i] = solver.IntVar(0, 1, 'fuse_ratio[%i]' % j)
-        solver.Add(fuse_ratio[i] <= x[i] * len(h[i]))
-        solver.Add(fuse_ratio[i] <= can_fuse_node_with_children[i])
+        node_count_fusable_children_if_picked[i] = solver.IntVar(0, len(h[i]), 'node_count_fusable_children_if_picked[%i]' % j)
+        solver.Add(node_count_fusable_children_if_picked[i] <= x[i] * len(h[i]))
+        solver.Add(node_count_fusable_children_if_picked[i] <= node_count_fusable_children[i])
 
     # Define objective
     obj_expr = [costs[j] * x[j] for j in range(num_nodes)]
-    fus_expr = [-(0.9 / max(1, len(h[i]))) * costs[j] * fuse_ratio[j] for j in range(num_nodes)]
+    fus_expr = [
+        # subtract fraction of consumer runtime
+        # equal to the ratio of fusable producers for that consumer
+        # scaling from 0 to MAX_FUSABLE_BONUS 
+        # (MAX_FUSABLE_BONUS = 1 means: 
+        #   if all producers are fusable contribute 0 in total to objective)
+        -1 * MAX_FUSABLE_BONUS * (1 / max(1, len(h[i]))) 
+           * costs[j] * node_count_fusable_children_if_picked[j] 
+        for j in range(num_nodes)
+    ]
 
     if args.fusion_costs:
         objective = sum(obj_expr) + sum(fus_expr)        
