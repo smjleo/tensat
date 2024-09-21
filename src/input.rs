@@ -1168,6 +1168,7 @@ fn extract_by_ilp(
         arg_vec.push("--no_order");
     }
     if fusion_costs {
+        println!("running with fusion costs");
         arg_vec.push("--fusion-costs");
     }
     let time_lim = "1000";
