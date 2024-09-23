@@ -267,6 +267,7 @@ pub mod ffi {
         fn new_blackbox_op(
             self: &mut CppGraphConverter,
             inpts: &[*mut TensorInfo],
+            captured: &[*mut TensorInfo],  // values that appear in a block that was declared outside
             cpp_num: i64,
             outputs: &Vec<Tensor>,
         ) -> Box<TensorInfo>;
@@ -550,15 +551,22 @@ impl CppGraphConverter {
         Box::new(res)
     }
 
+    fn new_tensorinfo_vec(
+        &mut self,
+        inputs: &[*mut TensorInfo]
+    ) -> Id {
+        let tensor_infos: Vec<&TensorInfo> = inputs.iter().map(|&ptr| unsafe { &*ptr }).collect();
+        let inputs_node = Mdl::Vec(tensor_infos.iter().map(|i| i.id).collect());
+        self.rec_expr.add(inputs_node)
+    }
+
     pub fn new_concatenate_op(
         &mut self,
         inputs: &[*mut TensorInfo],
         dimension: i64,
         output: ffi::Tensor,
     ) -> Box<TensorInfo> {
-        let tensor_infos: Vec<&TensorInfo> = inputs.iter().map(|&ptr| unsafe { &*ptr }).collect();
-        let inputs_node = Mdl::Vec(tensor_infos.iter().map(|i| i.id).collect());
-        let inputs_id = self.rec_expr.add(inputs_node);
+        let inputs_id = self.new_tensorinfo_vec(inputs);
         let dimension_id = self.add_or_get_val(dimension);
         let new_node = Mdl::ConcatenateOp([inputs_id, dimension_id]);
 
@@ -900,14 +908,14 @@ impl CppGraphConverter {
     pub fn new_blackbox_op(
         &mut self,
         inpts: &[*mut TensorInfo],
+        captured: &[*mut TensorInfo],
         cpp_num: i64,
         outputs: &Vec<ffi::Tensor>,
     ) -> Box<TensorInfo> {
-        let tensor_infos: Vec<&TensorInfo> = inpts.iter().map(|&ptr| unsafe { &*ptr }).collect();
         let cpp_num_node = self.add_or_get_val(cpp_num);
-        let mut ids: Vec<Id> = tensor_infos.iter().map(|inpt| inpt.id).collect();
-        ids.push(cpp_num_node);
-        let new_node = Mdl::BlackBox(ids.into_boxed_slice());
+        let inputs_id = self.new_tensorinfo_vec(inpts);
+        let captured_id = self.new_tensorinfo_vec(captured);
+        let new_node = Mdl::BlackBox([cpp_num_node, inputs_id, captured_id]);
 
         let res = TensorInfo {
             id: self.rec_expr.add(new_node),
@@ -922,9 +930,7 @@ impl CppGraphConverter {
     }
 
     pub fn new_return_op(&mut self, inpts: &[*mut TensorInfo]) -> Box<TensorInfo> {
-        let tensor_infos: Vec<&TensorInfo> = inpts.iter().map(|&ptr| unsafe { &*ptr }).collect();
-        let inputs_node = Mdl::Vec(tensor_infos.iter().map(|i| i.id).collect());
-        let inputs_id = self.rec_expr.add(inputs_node);
+        let inputs_id = self.new_tensorinfo_vec(inpts);
         let new_node = Mdl::ReturnOp([inputs_id]);
         // Returns do not produce values!
         let res = TensorInfo {

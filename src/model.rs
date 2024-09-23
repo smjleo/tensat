@@ -49,12 +49,12 @@ define_language! {
       "DynamicSliceOp"     = DynamicSliceOp([Id; 3]), // operand, start_indices, slice_sizes
       // Complete pain, has arity 12
       "ScatterOp"          = ScatterOp([Id; 4]), // input, scatter_indices, updates, dimension_numbers
-       "ReturnOp"            = ReturnOp([Id; 1]),
-       "BlackBox"           = BlackBox(Box<[Id]>),
-       "Vec"                = Vec(Vec<Id>),
-       "Index"              = Index([Id; 2]),
-       Var(Symbol),
-       Num(i64),
+      "ReturnOp"           = ReturnOp([Id; 1]),
+      "BlackBox"           = BlackBox([Id; 3]),  // id, args, captured values (last two should be vecs) 
+      "Vec"                = Vec(Vec<Id>),
+      "Index"              = Index([Id; 2]),
+      Var(Symbol),
+      Num(i64),
   }
 }
 
@@ -197,11 +197,7 @@ impl Analysis<Mdl> for TensorAnalysis {
                 }
             }
             Mdl::BlackBox(inputs) => {
-                let cpp_num = get_num(
-                    *inputs
-                        .last()
-                        .expect("Tried to call make() on a BlackBox without tensors"),
-                );
+                let cpp_num = get_num(inputs[0]);
                 let shape_vec = egraph.analysis.blackbox_cpp_num_to_shape[cpp_num]
                     .tensor_data
                     .tensors
